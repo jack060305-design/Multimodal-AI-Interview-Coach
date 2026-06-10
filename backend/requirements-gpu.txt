@@ -1,0 +1,15 @@
+# Optional GPU extras — install ONLY on machines with NVIDIA CUDA.
+# CPU-only machines: skip this file; requirements.txt is enough.
+#
+#   pip install -r requirements.txt
+#   pip install -r requirements-gpu.txt
+#
+# PyTorch with CUDA (pick index matching your CUDA version):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+#
+# faster-whisper uses ctranslate2; GPU support is included when CUDA drivers
+# are installed. If Whisper still runs on CPU, reinstall:
+#   pip install --force-reinstall ctranslate2
+
+# Uncomment after installing CUDA-enabled torch from pytorch.org:
+# torch>=2.0.0

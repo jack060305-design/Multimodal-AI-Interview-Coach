@@ -1,0 +1,14 @@
+# Production overlay — use with external Postgres, S3, Pinecone
+# docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+
+services:
+  backend:
+    environment:
+      STORAGE_BACKEND: s3
+      VECTOR_STORE: pinecone
+      DB_ENABLED: "true"
+      LANGCHAIN_TRACING_V2: "true"
+    restart: always
+
+  frontend:
+    restart: always

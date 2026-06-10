@@ -1,0 +1,14 @@
+# AMD GPU extras (Windows DirectML) — e.g. RX 6700 XT, RX 7900, etc.
+# Install ONLY on AMD machines AFTER requirements.txt:
+#
+#   pip install -r requirements.txt
+#   pip install -r requirements-amd.txt
+#
+# Then set in backend\.env:
+#   GPU_VENDOR=amd
+#   AMD_GPU_NAME=RX 6700 XT
+
+torch-directml>=0.2.0
+onnxruntime-directml>=1.17.0
+optimum[onnxruntime]>=1.20.0
+transformers>=4.40.0
