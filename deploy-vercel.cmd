@@ -1,48 +1,62 @@
-@echo off
-setlocal EnableExtensions
-cd /d "%~dp0\frontend"
-
-echo ============================================================
-echo  DEPLOY FRONTEND LEN VERCEL
-echo ============================================================
-echo.
-echo Luu y: Backend FastAPI chay rieng (Render/Railway/local).
-echo       Sau khi deploy, set NEXT_PUBLIC_API_URL trong Vercel Dashboard.
-echo.
-
-where npm >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Can cai Node.js
-    pause
-    exit /b 1
-)
-
-echo Cach 1 - GitHub ^(khuyen dung, khong can CLI^):
-echo   1. Vao https://vercel.com/new
-echo   2. Import repo: jack060305-design/Multimodal-AI-Interview-Coach
-echo   3. Root Directory: frontend
-echo   4. Environment: NEXT_PUBLIC_API_URL = URL backend cua ban
-echo   5. Deploy
-echo.
-echo Cach 2 - Vercel CLI:
-echo   npx vercel login
-echo   npx vercel --prod
-echo.
-set /p RUNCLI=Chay Vercel CLI ngay? [y/N]: 
-if /i not "%RUNCLI%"=="y" (
-    start https://vercel.com/new
-    pause
-    exit /b 0
-)
-
-call npm install
-call npx vercel login
-if errorlevel 1 (
-    echo Login that bai. Dung Cach 1 ^(GitHub import^).
-    start https://vercel.com/new
-    pause
-    exit /b 1
-)
-
-call npx vercel --prod
-pause
+@echo off
+setlocal EnableExtensions
+cd /d "%~dp0"
+
+echo ============================================================
+echo  DEPLOY FRONTEND LEN VERCEL
+echo ============================================================
+echo.
+echo QUAN TRONG: Root Directory phai la "frontend" (khong phai ./)
+echo.
+
+where npm >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Can cai Node.js: https://nodejs.org
+    pause
+    exit /b 1
+)
+
+if not exist "frontend\node_modules\vercel" (
+    echo Dang cai Vercel CLI...
+    pushd frontend
+    call npm install
+    popd
+)
+
+pushd frontend
+call .\node_modules\.bin\vercel.cmd whoami >nul 2>&1
+if errorlevel 1 (
+    echo Chua dang nhap Vercel. Mo trinh duyet de login GitHub...
+    start https://vercel.com/api/registration/login-with-github?mode=login
+    call npx vercel login
+    if errorlevel 1 (
+        echo.
+        echo Login that bai. Dung Vercel Dashboard:
+        echo   1. https://vercel.com/new
+        echo   2. Import: jack060305-design/Multimodal-AI-Interview-Coach
+        echo   3. Project Name: multimodal-ai-interview-coach
+        echo   4. Root Directory: frontend  ^<-- BAT BUOC
+        echo   5. Env: NEXT_PUBLIC_API_URL = http://localhost:8000
+        echo   6. Deploy
+        start https://vercel.com/new
+        popd
+        pause
+        exit /b 1
+    )
+)
+
+echo Dang deploy production...
+call npx vercel --prod --yes --name multimodal-ai-interview-coach
+set DEPLOY_EXIT=%ERRORLEVEL%
+popd
+
+if %DEPLOY_EXIT% neq 0 (
+    echo [ERROR] Deploy that bai.
+    pause
+    exit /b %DEPLOY_EXIT%
+)
+
+echo.
+echo DEPLOY XONG! Set NEXT_PUBLIC_API_URL trong Vercel Dashboard neu chua co.
+pause
+
