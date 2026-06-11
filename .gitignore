@@ -18,6 +18,10 @@ frontend/out/
 backend/.env
 frontend/.env.local
 
+# Vercel
+.vercel/
+frontend/.vercel/
+
 # OS / IDE
 .DS_Store
 Thumbs.db
