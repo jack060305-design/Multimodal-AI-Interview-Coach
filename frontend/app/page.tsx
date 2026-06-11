@@ -9,8 +9,7 @@ import {
   resolveConsentForRequest,
   setStoredGpuConsent,
 } from "@/lib/gpuConsent";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_URL, loadGpuStatus, loadQuestions, loadRoles } from "@/lib/api";
 
 type Role = { id: string; label: string };
 type Question = { question_id: string; question: string };
@@ -23,31 +22,29 @@ export default function Home() {
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offlineMode, setOfflineMode] = useState(false);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
   const [consentModalOpen, setConsentModalOpen] = useState(false);
   const [pendingConsent, setPendingConsent] = useState<GpuConsent | null>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/roles`)
-      .then((r) => r.json())
-      .then((d) => setRoles(d.roles || []))
-      .catch(() => setError("Cannot reach backend API."));
+    loadRoles().then(({ roles: loadedRoles, offline }) => {
+      setRoles(loadedRoles);
+      setOfflineMode(offline);
+      if (loadedRoles.length > 0) setRole(loadedRoles[0].id);
+    });
 
-    fetch(`${API_URL}/gpu/status`)
-      .then((r) => r.json())
-      .then((d) => setGpuStatus(d))
-      .catch(() => null);
+    loadGpuStatus().then((d) => setGpuStatus(d as GpuStatus | null));
   }, []);
 
   useEffect(() => {
     if (!role) return;
-    fetch(`${API_URL}/questions/${role}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setQuestions(d.questions || []);
-        setQuestionId(d.questions?.[0]?.question_id || "");
-      });
+    loadQuestions(role).then(({ questions: loadedQuestions, offline }) => {
+      setQuestions(loadedQuestions);
+      setQuestionId(loadedQuestions[0]?.question_id || "");
+      if (offline) setOfflineMode(true);
+    });
   }, [role]);
 
   const onRecorded = useCallback((blob: Blob) => {
@@ -90,7 +87,13 @@ export default function Home() {
       setResult(data);
       setPendingConsent(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      if (offlineMode) {
+        setError(
+          "Demo mode: roles & questions loaded locally. Start backend (setup.cmd) for video evaluation."
+        );
+      } else {
+        setError(e instanceof Error ? e.message : "Unknown error");
+      }
     } finally {
       setLoading(false);
     }
@@ -139,6 +142,12 @@ export default function Home() {
         {gpuStatus?.gpu_available && (
           <p className="mt-2 text-xs text-slate-500">
             GPU detected: {gpuStatus.gpu_name}. You will be asked before GPU acceleration is used.
+          </p>
+        )}
+        {offlineMode && (
+          <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            Demo mode — backend offline. Roles & questions loaded locally. Run{" "}
+            <code className="text-amber-100">setup.cmd</code> for full AI evaluation.
           </p>
         )}
       </header>
