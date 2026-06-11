@@ -7,42 +7,38 @@ echo  ========================================
 echo   Interview Coach - Local Setup
 echo  ========================================
 echo.
-echo  This installs dependencies and starts:
-echo    Web app  -^> http://localhost:3000
-echo    API      -^> http://127.0.0.1:8000
+echo  Structure:
+echo    rubrics/          questions + rubrics
+echo    backend/main.py   API server
+echo    backend/processors/  video + speech
+echo    backend/evaluator.py scoring
+echo    frontend/         web UI
 echo.
-echo  Online demo: https://multimodal-ai-interview-coach.vercel.app
+echo  Online: https://multimodal-ai-interview-coach.vercel.app
 echo.
 
 where python >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Python not found. Install Python 3.11+ from python.org
+    echo [ERROR] Install Python 3.11+ from python.org
     pause
     exit /b 1
 )
 
 where npm >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Node.js not found. Install from nodejs.org
+    echo [ERROR] Install Node.js from nodejs.org
     pause
     exit /b 1
 )
 
 where ffmpeg >nul 2>&1
 if errorlevel 1 (
-    echo [WARN] ffmpeg not in PATH. Install: winget install Gyan.FFmpeg
+    echo [WARN] ffmpeg missing. Install: winget install Gyan.FFmpeg
     echo.
 )
 
-echo [1/4] Backend...
-if not exist "backend\.venv" (
-    python -m venv backend\.venv
-    if errorlevel 1 (
-        echo [ERROR] Could not create Python virtual environment.
-        pause
-        exit /b 1
-    )
-)
+echo [1/4] Rubrics + backend...
+if not exist "backend\.venv" python -m venv backend\.venv
 
 call backend\.venv\Scripts\activate.bat
 pip install -r backend\requirements.txt -q
@@ -54,13 +50,13 @@ if errorlevel 1 (
 
 if not exist "backend\.env" (
     copy /Y backend\.env.example backend\.env >nul
-    echo       Created backend\.env (local AI mode, no API key needed).
+    echo       Created backend\.env
 )
 
 pushd backend
 python ingest_rubrics.py
 if errorlevel 1 (
-    echo [ERROR] Rubric setup failed.
+    echo [ERROR] rubrics/sample_rubrics.py ingest failed.
     popd
     pause
     exit /b 1
@@ -73,11 +69,11 @@ if not exist "node_modules" call npm install
 if not exist ".env.local" copy /Y .env.local.example .env.local >nul
 popd
 
-echo [3/4] Starting servers (2 new windows)...
+echo [3/4] Start API (main.py) + UI...
 start "Interview Coach - Backend" cmd /k "cd /d %~dp0backend && call .venv\Scripts\activate.bat && uvicorn main:app --reload --port 8000"
 start "Interview Coach - Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
 
-echo [4/4] Opening browser...
+echo [4/4] Open browser...
 set /a RETRIES=0
 
 :wait_frontend
@@ -94,17 +90,12 @@ start "" http://localhost:3000
 goto done
 
 :open_manual
-echo [WARN] Browser not opened automatically. Go to: http://localhost:3000
+echo [WARN] Open manually: http://localhost:3000
 
 :done
 echo.
-echo  ========================================
-echo   Ready
-echo  ========================================
-echo   Web:  http://localhost:3000
-echo   API:  http://127.0.0.1:8000
-echo.
-echo   Close the Backend and Frontend windows to stop.
-echo  ========================================
+echo  Ready
+echo    Web : http://localhost:3000
+echo    API : http://127.0.0.1:8000
 echo.
 pause
