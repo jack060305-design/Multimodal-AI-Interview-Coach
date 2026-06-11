@@ -17,7 +17,7 @@ Multimodal AI interview coaching platform that analyzes **video, audio, and tran
 | Storage | Local filesystem or S3 (MinIO/AWS) |
 | Orchestration | LangGraph multimodal pipeline |
 | Tracing | LangSmith (optional) |
-| Deployment | Docker Compose, Render blueprint |
+| Deployment | Vercel (frontend), Docker Compose (local full stack) |
 
 ## Architecture
 
@@ -168,9 +168,9 @@ See `backend/.env.example` for all variables.
 
 ## Production Deploy
 
-- **Render**: `deploy/render.yaml`
+- **Vercel**: https://multimodal-ai-interview-coach.vercel.app (frontend)
+- **Local full AI**: `setup.cmd`
 - **Docker prod overlay**: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up`
-- Set `VECTOR_STORE=pinecone`, `STORAGE_BACKEND=s3`, external Postgres + S3 credentials
 
 ## Project Structure
 
@@ -186,7 +186,7 @@ interview-coach/
 │   ├── storage/               # S3 + local
 │   └── tracing/               # LangSmith
 ├── frontend/                  # Next.js recorder + results
-├── deploy/render.yaml
+├── vercel.json
 ├── docker-compose.yml
 └── setup.cmd
 ```

@@ -17,7 +17,6 @@ frontend/out/
 .env
 backend/.env
 frontend/.env.local
-deploy/secrets.env
 
 # Vercel
 .vercel/
