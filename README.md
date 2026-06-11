@@ -1,195 +1,86 @@
 # Interview Coach
 
-Multimodal AI interview coaching platform that analyzes **video, audio, and transcript** signals using Whisper, MediaPipe, OpenCV, librosa, and **LLM-based RAG rubric evaluation** to generate structured feedback across **delivery**, **communication**, and **technical depth**.
+AI mock interview app: record a video answer, get scores for **delivery**, **communication**, and **technical depth**.
 
-## Stack
+## Live demo (no install)
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | Next.js 14, Tailwind, webcam video recorder |
-| Backend | FastAPI |
-| STT | faster-whisper (Whisper) |
-| CV | MediaPipe Face Landmarker + OpenCV |
-| Audio | librosa (pitch, RMS, WPM, pauses) |
-| LLM | GPT-4o mini / Claude / Gemini |
-| RAG | LangChain + Chroma or Pinecone |
-| Database | PostgreSQL (evaluation history) |
-| Storage | Local filesystem or S3 (MinIO/AWS) |
-| Orchestration | LangGraph multimodal pipeline |
-| Tracing | LangSmith (optional) |
-| Deployment | Vercel (frontend), Docker Compose (local full stack) |
+**https://multimodal-ai-interview-coach.vercel.app**
 
-## Architecture
+Use the site in your browser. Roles and questions load from the page. Full video analysis needs the local app (below).
 
-```
-Record video (Next.js)
-  → Upload POST /evaluate
-  → LangGraph pipeline:
-      ffmpeg → Whisper → MediaPipe CV → librosa audio
-      → RAG retrieve rubric (Chroma/Pinecone)
-      → LLM grounded scoring (OpenAI/Anthropic/Gemini)
-  → Performance pillars: Delivery | Communication | Technical Depth
-  → Persist: Postgres + S3/local storage
-```
+---
 
-## Quick Start (Windows)
+## Run on your computer (full AI)
+
+### What you need
+
+| Tool | Install |
+|------|---------|
+| Python 3.11+ | [python.org](https://www.python.org/downloads/) |
+| Node.js 20+ | [nodejs.org](https://nodejs.org/) |
+| ffmpeg | `winget install Gyan.FFmpeg` |
+
+### Start (Windows)
+
+Double-click **`setup.cmd`** or run:
 
 ```cmd
 setup.cmd
 ```
 
-Opens http://localhost:3000 automatically.
+This will:
 
-### Prerequisites
+1. Install Python and Node dependencies  
+2. Start the API on port **8000**  
+3. Start the web app on port **3000**  
+4. Open **http://localhost:3000**
 
-- Python 3.11+, Node.js 20+
-- ffmpeg: `winget install Gyan.FFmpeg`
-- `OPENAI_API_KEY` in `backend\.env`
+Close the two black terminal windows to stop.
 
-### GPU (optional — safe on every machine)
+### How to use the app
 
-Default **`ACCELERATOR_MODE=auto`**: uses NVIDIA CUDA when available, otherwise CPU. **No GPU required** — machines without CUDA never crash.
+1. Pick a **role** and **question**  
+2. **Record** your answer  
+3. Click **Submit for Evaluation**  
+4. Read scores and feedback on the right  
 
-| Mode | Behavior |
-|------|----------|
-| `auto` | GPU if CUDA detected, else CPU (default) |
-| `cpu` | Force CPU (laptops, CI, low-spec machines) |
-| `gpu` | Prefer GPU, **fall back to CPU** if unavailable |
+No OpenAI key required by default (`LLM_PROVIDER=local` in `backend/.env`). For GPT scoring, set `LLM_PROVIDER=openai` and add `OPENAI_API_KEY`.
 
-```env
-ACCELERATOR_MODE=auto
-WHISPER_DEVICE=auto
-WHISPER_COMPUTE=auto
-EMBEDDING_DEVICE=auto
+---
+
+## Project layout
+
+```
+interview-coach/
+├── frontend/     Next.js UI (also on Vercel)
+├── backend/      FastAPI + Whisper + video/audio analysis
+├── rubrics/      Interview questions and scoring rubrics
+├── setup.cmd     Start everything locally (Windows)
+└── vercel.json   Vercel deploy config
 ```
 
-Check runtime profile:
+---
 
-```cmd
-cd backend
-.venv\Scripts\activate.bat
-python scripts\check_gpu.py
-```
+## Optional
 
-**GPU machine only** (optional extras):
-
-```cmd
-pip install -r requirements-gpu.txt
-pip install torch --index-url https://download.pytorch.org/whl/cu124
-```
-
-`GET /health` returns `accelerator` with `using_gpu`, `whisper_device`, etc.
-
-### AMD Radeon (RX 6700 XT, RX 7900, …)
-
-Windows + AMD uses **DirectML** (not CUDA). Auto-detects Radeon via WMI, or set manually:
-
-```env
-GPU_VENDOR=amd
-AMD_GPU_NAME=RX 6700 XT
-WHISPER_BACKEND=onnx_directml
-```
-
-```cmd
-pip install -r requirements-amd.txt
-python scripts\check_gpu.py
-```
-
-| Component | AMD path |
-|-----------|----------|
-| Whisper STT | ONNX + DirectML (`onnx_directml`) |
-| RAG embeddings | `torch-directml` |
-| No DirectML installed | CPU fallback (no crash) |
-
-Machines without AMD/NVIDIA still use `GPU_VENDOR=auto` → CPU.
-
-### GPU consent (required before acceleration)
-
-GPU is **never used until the user allows it**:
-
-| Choice | Behavior |
-|--------|----------|
-| **Just once** | GPU for current evaluation only |
-| **Always** | Saved in browser + server (`data/gpu_consent.json`) |
-| **CPU only** | Never use GPU on this machine |
-
-- Web app shows a modal on first submit if GPU is detected
-- `setup.cmd` asks the same question when starting the project
-- `GET /gpu/status` — check if prompt is required
-- `POST /gpu/consent` — `{ "choice": "always" | "never" | "reset" }`
-
-## Docker (full stack)
-
-Includes **Postgres**, **MinIO (S3)**, backend, and production-built frontend:
+**Docker (Postgres + MinIO + full stack)**
 
 ```cmd
 copy backend\.env.example backend\.env
 docker compose up --build
 ```
 
-- Web UI: http://localhost:3000
-- API: http://localhost:8000
-- MinIO console: http://localhost:9001 (minio / minio12345)
+**GPU** — Works on CPU by default. NVIDIA or AMD extras: see comments in `backend/.env.example`.
 
-## Configuration (`backend/.env`)
+**API docs** — After local start: http://127.0.0.1:8000/docs
 
-```env
-# LLM: openai | anthropic | gemini
-LLM_PROVIDER=openai
-LLM_MODEL=gpt-4o-mini
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /roles` | List roles |
+| `GET /questions/{role}` | Questions for a role |
+| `POST /evaluate` | Upload video, get scores |
 
-# Vector store: chroma | pinecone
-VECTOR_STORE=chroma
-
-# Storage: local | s3
-STORAGE_BACKEND=local
-
-# Postgres
-DATABASE_URL=postgresql+psycopg2://interview:interview@localhost:5432/interview_coach
-
-# LangSmith (optional)
-LANGCHAIN_TRACING_V2=true
-LANGSMITH_API_KEY=...
-```
-
-See `backend/.env.example` for all variables.
-
-## API
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Service status + config |
-| GET | `/roles` | Available interview roles |
-| GET | `/questions/{role}` | Questions per role |
-| POST | `/evaluate` | Multimodal evaluation (multipart video) |
-| GET | `/evaluations` | Evaluation history (Postgres) |
-| GET | `/evaluations/{id}` | Single evaluation result |
-| WS | `/ws/evaluation-progress` | Real-time progress channel |
-
-## Production Deploy
-
-- **Vercel**: https://multimodal-ai-interview-coach.vercel.app (frontend)
-- **Local full AI**: `setup.cmd`
-- **Docker prod overlay**: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up`
-
-## Project Structure
-
-```
-interview-coach/
-├── backend/
-│   ├── main.py
-│   ├── config.py
-│   ├── workflows/langgraph_pipeline.py
-│   ├── processors/          # video, whisper, CV, audio
-│   ├── rubric_engine/       # Chroma + Pinecone RAG
-│   ├── db/                    # Postgres models
-│   ├── storage/               # S3 + local
-│   └── tracing/               # LangSmith
-├── frontend/                  # Next.js recorder + results
-├── vercel.json
-├── docker-compose.yml
-└── setup.cmd
-```
+---
 
 ## License
 
