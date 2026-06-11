@@ -3,7 +3,30 @@
   "installCommand": "cd frontend && npm install",
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/out",
-  "env": {
-    "NEXT_PUBLIC_API_URL": "http://localhost:8000"
-  }
+  "rewrites": [
+    {
+      "source": "/roles",
+      "destination": "https://interview-coach-api.onrender.com/roles"
+    },
+    {
+      "source": "/questions/:path*",
+      "destination": "https://interview-coach-api.onrender.com/questions/:path*"
+    },
+    {
+      "source": "/evaluate",
+      "destination": "https://interview-coach-api.onrender.com/evaluate"
+    },
+    {
+      "source": "/gpu/:path*",
+      "destination": "https://interview-coach-api.onrender.com/gpu/:path*"
+    },
+    {
+      "source": "/evaluations",
+      "destination": "https://interview-coach-api.onrender.com/evaluations"
+    },
+    {
+      "source": "/health",
+      "destination": "https://interview-coach-api.onrender.com/health"
+    }
+  ]
 }
