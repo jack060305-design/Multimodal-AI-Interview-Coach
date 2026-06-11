@@ -120,6 +120,11 @@ class RubricEvaluator:
         transcript: TranscriptResult,
         rubric_payload: dict[str, Any],
     ) -> dict[str, Any]:
+        from rubric_engine.local_evaluator import _has_valid_llm_key, evaluate_local
+
+        if not _has_valid_llm_key():
+            return evaluate_local(role, transcript, rubric_payload)
+
         system = EVALUATOR_SYSTEM.format(role=role.value.replace("_", " ").title())
         user = EVALUATOR_USER.format(
             rubric_json=json.dumps(rubric_payload["rubric"], indent=2, ensure_ascii=False),

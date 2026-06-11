@@ -1,0 +1,34 @@
+{
+  "roles": [
+    { "id": "swe_intern", "label": "SWE Intern" },
+    { "id": "data_analyst", "label": "Data Analyst" },
+    { "id": "finance_analyst", "label": "Finance Analyst" },
+    { "id": "product_manager", "label": "Product Manager" }
+  ],
+  "questions": {
+    "swe_intern": [
+      {
+        "question_id": "react_useeffect_001",
+        "question": "Explain how React useEffect works and when you would use it."
+      }
+    ],
+    "data_analyst": [
+      {
+        "question_id": "sql_window_functions_001",
+        "question": "What are SQL window functions and give an example use case?"
+      }
+    ],
+    "finance_analyst": [
+      {
+        "question_id": "dcf_basics_001",
+        "question": "Walk me through a basic DCF valuation approach."
+      }
+    ],
+    "product_manager": [
+      {
+        "question_id": "prioritization_001",
+        "question": "How do you prioritize features on a crowded roadmap?"
+      }
+    ]
+  }
+}

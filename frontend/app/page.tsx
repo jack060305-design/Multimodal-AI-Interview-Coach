@@ -31,18 +31,23 @@ export default function Home() {
 
   useEffect(() => {
     setLoadingCatalog(true);
-    fetch(`${API_URL}/roles`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load roles");
-        return r.json();
-      })
-      .then((d) => {
+    const loadCatalog = async () => {
+      try {
+        const r = await fetch(`${API_URL}/roles`);
+        if (!r.ok) throw new Error("api");
+        const d = await r.json();
         const loaded = d.roles || [];
         setRoles(loaded);
         if (loaded.length > 0) setRole(loaded[0].id);
-      })
-      .catch(() => null)
-      .finally(() => setLoadingCatalog(false));
+      } catch {
+        const c = await fetch("/catalog.json").then((r) => r.json());
+        setRoles(c.roles || []);
+        if (c.roles?.[0]) setRole(c.roles[0].id);
+      } finally {
+        setLoadingCatalog(false);
+      }
+    };
+    loadCatalog();
 
     fetch(`${API_URL}/gpu/status`)
       .then((r) => r.json())
@@ -52,16 +57,21 @@ export default function Home() {
 
   useEffect(() => {
     if (!role) return;
-    fetch(`${API_URL}/questions/${role}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load questions");
-        return r.json();
-      })
-      .then((d) => {
+    const loadQuestions = async () => {
+      try {
+        const r = await fetch(`${API_URL}/questions/${role}`);
+        if (!r.ok) throw new Error("api");
+        const d = await r.json();
         setQuestions(d.questions || []);
         setQuestionId(d.questions?.[0]?.question_id || "");
-      })
-      .catch(() => setQuestions([]));
+      } catch {
+        const c = await fetch("/catalog.json").then((r) => r.json());
+        const qs = c.questions?.[role] || [];
+        setQuestions(qs);
+        setQuestionId(qs[0]?.question_id || "");
+      }
+    };
+    loadQuestions();
   }, [role]);
 
   const onRecorded = useCallback((blob: Blob) => {
