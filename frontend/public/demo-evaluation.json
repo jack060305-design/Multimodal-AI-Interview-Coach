@@ -1,0 +1,71 @@
+{
+  "evaluation_id": "00000000-0000-4000-8000-000000000001",
+  "overall_score": 78,
+  "role": "swe_intern",
+  "question": "Explain how React useEffect works and when you would use it.",
+  "question_id": "react_useeffect_001",
+  "transcript": "useEffect runs after render to handle side effects like fetching data or subscribing to events. You pass a function and a dependency array so the effect re-runs only when those values change.",
+  "performance": {
+    "delivery": {
+      "score": 76,
+      "label": "Delivery",
+      "summary": "Eye contact, confidence, and on-camera presence.",
+      "signals": ["eye_contact", "confidence", "posture"]
+    },
+    "communication": {
+      "score": 80,
+      "label": "Communication",
+      "summary": "Clarity, pacing, filler words, and response structure.",
+      "signals": ["filler_words", "response_quality", "wpm"]
+    },
+    "technical_depth": {
+      "score": 77,
+      "label": "Technical Depth",
+      "summary": "Rubric-grounded content accuracy and depth.",
+      "signals": ["technical_depth"]
+    }
+  },
+  "metrics": {
+    "eye_contact": {
+      "score": 75,
+      "percentage": 72.5,
+      "comment": "Good eye contact; occasional glances away.",
+      "head_movement_score": 80,
+      "posture_score": 78
+    },
+    "filler_words": {
+      "score": 70,
+      "count": 3,
+      "rate": 4.2,
+      "top_fillers": ["um", "like"],
+      "wpm": 138,
+      "long_pauses": 1
+    },
+    "confidence": {
+      "score": 77,
+      "factors": {
+        "voice": 74.0,
+        "language": 80.0,
+        "eye_contact": 75.0,
+        "filler_penalty": 42.0
+      }
+    },
+    "technical_depth": {
+      "score": 77,
+      "breakdown": [],
+      "comment": "Demo result — deploy the FastAPI backend for rubric-grounded scoring."
+    },
+    "response_quality": {
+      "score": 82,
+      "breakdown": [],
+      "comment": "Clear structure with relevant technical terms."
+    }
+  },
+  "improvement_suggestions": [
+    "This is a demo scorecard. Run setup.cmd locally for real Whisper + MediaPipe analysis.",
+    "Reduce filler words and pause briefly before key technical points.",
+    "Mention cleanup in useEffect when subscribing to external resources."
+  ],
+  "video_storage_key": null,
+  "demo_mode": true
+}

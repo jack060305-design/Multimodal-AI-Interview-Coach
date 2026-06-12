@@ -5,12 +5,17 @@ import GpuConsentModal, { GpuStatus } from "@/components/GpuConsentModal";
 import ResultsPanel from "@/components/ResultsPanel";
 import VideoRecorder from "@/components/VideoRecorder";
 import {
+  ApiError,
+  fetchJson,
+  hasApiBackend,
+  loadDemoEvaluation,
+  postEvaluate,
+} from "@/lib/api";
+import {
   GpuConsent,
   resolveConsentForRequest,
   setStoredGpuConsent,
 } from "@/lib/gpuConsent";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type Role = { id: string; label: string };
 type Question = { question_id: string; question: string };
@@ -25,6 +30,7 @@ export default function Home() {
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
   const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
   const [consentModalOpen, setConsentModalOpen] = useState(false);
   const [pendingConsent, setPendingConsent] = useState<GpuConsent | null>(null);
@@ -33,9 +39,8 @@ export default function Home() {
     setLoadingCatalog(true);
     const loadCatalog = async () => {
       try {
-        const r = await fetch(`${API_URL}/roles`);
-        if (!r.ok) throw new Error("api");
-        const d = await r.json();
+        if (!hasApiBackend()) throw new Error("no-api");
+        const d = await fetchJson<{ roles: Role[] }>("/roles");
         const loaded = d.roles || [];
         setRoles(loaded);
         if (loaded.length > 0) setRole(loaded[0].id);
@@ -49,19 +54,19 @@ export default function Home() {
     };
     loadCatalog();
 
-    fetch(`${API_URL}/gpu/status`)
-      .then((r) => r.json())
-      .then((d) => setGpuStatus(d))
-      .catch(() => null);
+    if (hasApiBackend()) {
+      fetchJson<GpuStatus>("/gpu/status")
+        .then((d) => setGpuStatus(d))
+        .catch(() => null);
+    }
   }, []);
 
   useEffect(() => {
     if (!role) return;
     const loadQuestions = async () => {
       try {
-        const r = await fetch(`${API_URL}/questions/${role}`);
-        if (!r.ok) throw new Error("api");
-        const d = await r.json();
+        if (!hasApiBackend()) throw new Error("no-api");
+        const d = await fetchJson<{ questions: Question[] }>(`/questions/${role}`);
         setQuestions(d.questions || []);
         setQuestionId(d.questions?.[0]?.question_id || "");
       } catch {
@@ -86,6 +91,20 @@ export default function Home() {
 
     setLoading(true);
     setError(null);
+    setDemoMode(false);
+
+    if (!hasApiBackend()) {
+      try {
+        const demo = await loadDemoEvaluation();
+        setResult(demo);
+        setDemoMode(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Demo evaluation unavailable");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     const form = new FormData();
     form.append("role", role);
@@ -97,21 +116,23 @@ export default function Home() {
     try {
       if (consent === "always" || consent === "never") {
         setStoredGpuConsent(consent);
-        await fetch(`${API_URL}/gpu/consent`, {
+        await fetchJson("/gpu/consent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ choice: consent }),
         });
       }
 
-      const res = await fetch(`${API_URL}/evaluate`, { method: "POST", body: form });
-      const data = await res.json();
-      if (res.status === 428) {
-        setConsentModalOpen(true);
-        return;
+      try {
+        const data = await postEvaluate(form);
+        setResult(data);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 428) {
+          setConsentModalOpen(true);
+          return;
+        }
+        throw e;
       }
-      if (!res.ok) throw new Error(data.detail?.message || data.detail || "Evaluation failed");
-      setResult(data);
       setPendingConsent(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -160,6 +181,12 @@ export default function Home() {
           Record your answer, get eye contact, filler word, confidence analytics, and
           RAG-grounded technical depth evaluation.
         </p>
+        {!hasApiBackend() && (
+          <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            Demo mode (no API backend). Submit shows sample scores — run{" "}
+            <code className="text-amber-100">setup.cmd</code> locally for real analysis.
+          </p>
+        )}
         {gpuStatus?.gpu_available && (
           <p className="mt-2 text-xs text-slate-500">
             GPU detected: {gpuStatus.gpu_name}. You will be asked before GPU acceleration is used.
@@ -225,6 +252,11 @@ export default function Home() {
         </section>
 
         <section>
+          {demoMode && (
+            <p className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
+              Sample results only — your recording was not sent to the API.
+            </p>
+          )}
           {result ? (
             <ResultsPanel result={result as never} />
           ) : (
