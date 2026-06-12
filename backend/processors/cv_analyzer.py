@@ -9,6 +9,7 @@ import numpy as np
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
+from processors.processing_config import MAX_FRAMES_TO_ANALYZE
 from schemas import EyeContactMetric
 
 MODEL_URL = (
@@ -19,10 +20,10 @@ MODEL_PATH = Path(__file__).resolve().parent / "face_landmarker.task"
 
 
 @dataclass
-class FrameAnalysis:
-    eye_contact: bool
-    head_yaw: float
-    head_pitch: float
+class FrameFaceData:
+    eye_contact_score: float
+    face_position: tuple[float, float]
+    nose_y: float
     posture_upright: bool
 
 
@@ -58,73 +59,109 @@ class CVAnalyzer:
                 comment="No frames extracted from video.",
             )
 
-        analyses: list[FrameAnalysis] = []
+        if len(frame_paths) > MAX_FRAMES_TO_ANALYZE:
+            step = max(1, len(frame_paths) // MAX_FRAMES_TO_ANALYZE)
+            frame_paths = frame_paths[::step][:MAX_FRAMES_TO_ANALYZE]
+
+        frame_data: list[FrameFaceData] = []
+        frames_analyzed = 0
+        frames_with_face = 0
+
         for path in frame_paths:
             image = cv2.imread(str(path))
             if image is None:
                 continue
-            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            result = self.detector.detect(mp_image)
-            if not result.face_landmarks:
-                analyses.append(
-                    FrameAnalysis(
-                        eye_contact=False,
-                        head_yaw=0.0,
-                        head_pitch=0.0,
+
+            frames_analyzed += 1
+            data = self._detect_face(image)
+            if data is None:
+                frame_data.append(
+                    FrameFaceData(
+                        eye_contact_score=0.0,
+                        face_position=(0.0, 0.0),
+                        nose_y=0.0,
                         posture_upright=False,
                     )
                 )
                 continue
-            analyses.append(self._analyze_landmarks(result.face_landmarks[0]))
 
-        if not analyses:
+            frames_with_face += 1
+            frame_data.append(data)
+
+        if not frame_data:
             return EyeContactMetric(
                 score=0,
                 percentage=0.0,
                 comment="Could not read any video frames.",
             )
 
-        eye_frames = sum(1 for a in analyses if a.eye_contact)
-        percentage = (eye_frames / len(analyses)) * 100
+        eye_scores = [d.eye_contact_score for d in frame_data if d.eye_contact_score > 0]
+        eye_contact_ratio = float(np.mean(eye_scores)) if eye_scores else 0.0
+        percentage = eye_contact_ratio * 100
 
-        yaw_values = [abs(a.head_yaw) for a in analyses]
-        pitch_values = [abs(a.head_pitch) for a in analyses]
-        head_stability = 100 - min(100, np.std(yaw_values + pitch_values) * 5)
+        face_positions = [
+            d.face_position for d in frame_data if d.face_position != (0.0, 0.0)
+        ]
+        head_stability = self._head_stability_score(face_positions)
+        expression_variance = self._expression_variance_score(frame_data)
+        face_detection_rate = (
+            frames_with_face / frames_analyzed if frames_analyzed > 0 else 0.0
+        )
 
-        upright_frames = sum(1 for a in analyses if a.posture_upright)
-        posture_pct = (upright_frames / len(analyses)) * 100
+        upright_frames = sum(1 for d in frame_data if d.posture_upright)
+        posture_pct = (upright_frames / len(frame_data)) * 100
 
-        score = self._score_eye_contact(percentage)
-        comment = self._comment(percentage, head_stability, posture_pct)
+        engagement = (
+            0.5 * eye_contact_ratio
+            + 0.3 * head_stability
+            + 0.2 * face_detection_rate
+        )
+        score = self._score_engagement(engagement, percentage)
+        comment = self._comment(percentage, head_stability * 100, posture_pct)
 
         return EyeContactMetric(
             score=score,
             percentage=round(percentage, 1),
             comment=comment,
-            head_movement_score=int(round(head_stability)),
+            head_movement_score=int(round(head_stability * 100)),
             posture_score=int(round(posture_pct)),
         )
 
-    def _analyze_landmarks(self, landmarks) -> FrameAnalysis:
+    def _detect_face(self, image: np.ndarray) -> FrameFaceData | None:
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        result = self.detector.detect(mp_image)
+        if not result.face_landmarks:
+            return None
+
+        landmarks = result.face_landmarks[0]
+        h, w = image.shape[:2]
+
+        left_eye = np.array(
+            [(landmarks[33].x * w, landmarks[33].y * h), (landmarks[133].x * w, landmarks[133].y * h)]
+        )
+        right_eye = np.array(
+            [(landmarks[362].x * w, landmarks[362].y * h), (landmarks[263].x * w, landmarks[263].y * h)]
+        )
         nose = landmarks[1]
-        left_eye = landmarks[33]
-        right_eye = landmarks[263]
         chin = landmarks[152]
         forehead = landmarks[10]
 
-        eye_center_x = (left_eye.x + right_eye.x) / 2
-        eye_center_y = (left_eye.y + right_eye.y) / 2
+        eyes_center = (left_eye.mean(axis=0) + right_eye.mean(axis=0)) / 2
+        image_center = np.array([w / 2, h / 2])
+        distance = float(np.linalg.norm(eyes_center - image_center))
+        max_distance = float(np.linalg.norm(image_center))
+        gaze_score = max(0.0, 1.0 - (distance / max(max_distance, 1e-6)))
 
-        offset_x = (nose.x - eye_center_x) * 100
-        offset_y = (nose.y - eye_center_y) * 100
-
+        offset_x = (nose.x - (landmarks[33].x + landmarks[263].x) / 2) * 100
+        offset_y = (nose.y - (landmarks[33].y + landmarks[263].y) / 2) * 100
         yaw = math.degrees(math.atan2(offset_x, 50))
         pitch = math.degrees(math.atan2(offset_y, 50))
-
-        eye_contact = (
+        landmark_eye_contact = (
             abs(yaw) < self.EYE_THRESHOLD_DEG and abs(pitch) < self.EYE_THRESHOLD_DEG
         )
+        landmark_score = 1.0 if landmark_eye_contact else 0.0
+        eye_contact_score = 0.6 * gaze_score + 0.4 * landmark_score
 
         face_height = abs(forehead.y - chin.y)
         nose_to_chin = abs(nose.y - chin.y)
@@ -132,19 +169,47 @@ class CVAnalyzer:
             nose_to_chin / max(face_height, 1e-6)
         ) < 0.65
 
-        return FrameAnalysis(
-            eye_contact=eye_contact,
-            head_yaw=yaw,
-            head_pitch=pitch,
+        return FrameFaceData(
+            eye_contact_score=eye_contact_score,
+            face_position=(float(nose.x * w), float(nose.y * h)),
+            nose_y=float(nose.y * h),
             posture_upright=posture_upright,
         )
 
-    def _score_eye_contact(self, percentage: float) -> int:
-        if percentage >= 80:
+    def _head_stability_score(self, positions: list[tuple[float, float]]) -> float:
+        if len(positions) < 2:
+            return 1.0
+
+        movements = []
+        for i in range(1, len(positions)):
+            prev = np.array(positions[i - 1])
+            curr = np.array(positions[i])
+            movements.append(float(np.linalg.norm(curr - prev)))
+
+        avg_movement = float(np.mean(movements))
+        normalized = min(avg_movement / 50.0, 1.0)
+        return max(0.0, 1.0 - normalized)
+
+    def _expression_variance_score(self, frame_data: list[FrameFaceData]) -> float:
+        nose_positions = [d.nose_y for d in frame_data if d.nose_y > 0]
+        if len(nose_positions) < 5:
+            return 0.5
+
+        variance = float(np.var(nose_positions))
+        normalized = min(variance / 100.0, 1.0)
+        if 0.2 <= normalized <= 0.4:
+            return 0.9
+        if normalized < 0.2:
+            return 0.6
+        return max(0.3, 1.0 - normalized)
+
+    def _score_engagement(self, engagement: float, eye_pct: float) -> int:
+        blended = engagement * 0.6 + (eye_pct / 100) * 0.4
+        if blended >= 0.8:
             return 90
-        if percentage >= 60:
+        if blended >= 0.6:
             return 75
-        if percentage >= 40:
+        if blended >= 0.4:
             return 55
         return 35
 
