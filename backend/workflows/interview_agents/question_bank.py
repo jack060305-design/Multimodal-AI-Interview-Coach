@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+from rubrics.bank_rubrics import BANK_QUESTION_META, BANK_RUBRICS
 from rubrics.sample_rubrics import SAMPLE_RUBRICS
 from schemas import Role
 
@@ -40,41 +41,18 @@ def _build_bank() -> dict[str, dict[str, list[BankQuestion]]]:
             )
         )
 
-    extras: dict[str, list[tuple[str, str, int, str]]] = {
-        Role.SWE_INTERN.value: [
-            ("swe_intern_debug_001", "How do you approach debugging a production issue?", 2, "problem_solving"),
-            ("swe_intern_git_001", "Explain a merge conflict and how you resolved one.", 2, "collaboration"),
-            ("swe_intern_tradeoff_001", "Describe a time you chose a simpler solution over a clever one.", 3, "execution"),
-        ],
-        Role.DATA_ANALYST.value: [
-            ("da_metrics_001", "How do you define and validate a product metric?", 3, "problem_solving"),
-            ("da_ab_test_001", "Walk through how you would design an A/B test.", 3, "execution"),
-            ("da_stakeholder_001", "Tell me about presenting insights to a non-technical stakeholder.", 2, "communication"),
-        ],
-        Role.FINANCE_ANALYST.value: [
-            ("fa_variance_001", "How do you explain a budget variance to leadership?", 2, "communication"),
-            ("fa_model_001", "What checks do you run before sharing a financial model?", 3, "execution"),
-            ("fa_assumption_001", "Describe a time a key assumption in your analysis was wrong.", 3, "adaptability"),
-        ],
-        Role.PRODUCT_MANAGER.value: [
-            ("pm_discovery_001", "How do you run discovery when requirements are ambiguous?", 3, "problem_solving"),
-            ("pm_roadmap_001", "Describe balancing tech debt against new features.", 3, "execution"),
-            ("pm_conflict_001", "Tell me about aligning engineering and sales on priorities.", 3, "collaboration"),
-        ],
-    }
-
-    for role_key, items in extras.items():
-        role = Role(role_key)
-        for qid, text, diff, comp in items:
-            bank.setdefault(role_key, {}).setdefault(comp, []).append(
-                BankQuestion(
-                    question_id=qid,
-                    question=text,
-                    competency=comp,
-                    difficulty=diff,
-                    role=role,
-                )
+    for doc in BANK_RUBRICS:
+        role_key = doc.role.value
+        competency, difficulty = BANK_QUESTION_META[doc.question_id]
+        bank.setdefault(role_key, {}).setdefault(competency, []).append(
+            BankQuestion(
+                question_id=doc.question_id,
+                question=doc.question,
+                competency=competency,
+                difficulty=difficulty,
+                role=doc.role,
             )
+        )
 
     return bank
 
@@ -91,11 +69,49 @@ def initial_question_budget(role: str) -> dict[str, int]:
     return {c: DEFAULT_QUESTION_BUDGET for c in competencies_for_role(role)}
 
 
+def get_question_by_id(role: str, question_id: str) -> BankQuestion | None:
+    for questions in QUESTION_BANK.get(role, {}).values():
+        for q in questions:
+            if q.question_id == question_id:
+                return q
+    return None
+
+
+def all_questions_for_role(role: str) -> list[BankQuestion]:
+    return [q for questions in QUESTION_BANK.get(role, {}).values() for q in questions]
+
+
+def pick_random_preview(
+    role: str,
+    difficulty: int = 3,
+    exclude_ids: list[str] | None = None,
+) -> BankQuestion | None:
+    """Random question from the role bank (preview / shuffle before interview starts)."""
+    exclude = set(exclude_ids or [])
+    pool = [q for q in all_questions_for_role(role) if q.question_id not in exclude]
+    if not pool:
+        pool = all_questions_for_role(role)
+    if not pool:
+        return None
+
+    level = max(1, min(5, difficulty))
+    near = [q for q in pool if abs(q.difficulty - level) <= 1]
+    return random.choice(near or pool)
+
+
+def session_rng(state: dict) -> random.Random:
+    """Deterministic per session so the same turn does not reshuffle questions."""
+    seed = state.get("session_id") or state.get("role") or "default"
+    turn = int(state.get("turn_number", 0))
+    return random.Random(f"{seed}:{turn}:{len(state.get('asked_question_ids', []))}")
+
+
 def search_question_bank(
     role: str,
     competency: str,
     difficulty: int,
     exclude_ids: list[str] | None = None,
+    rng: random.Random | None = None,
 ) -> BankQuestion | None:
     exclude = set(exclude_ids or [])
     comp_bank = QUESTION_BANK.get(role, {}).get(competency, [])
@@ -109,7 +125,8 @@ def search_question_bank(
         candidates = [q for q in comp_bank if q.question_id not in exclude]
     if not candidates:
         return None
-    return random.choice(candidates)
+    picker = rng or random
+    return picker.choice(candidates)
 
 
 def pick_competency(state: dict) -> str:
@@ -117,6 +134,7 @@ def pick_competency(state: dict) -> str:
     budget = state.get("question_budget", {})
     banned = set(state.get("banned_competencies", []))
     scores = state.get("competency_scores", {})
+    rng = session_rng(state)
 
     available = [c for c, n in budget.items() if n > 0 and c not in banned]
     if not available:
@@ -124,13 +142,13 @@ def pick_competency(state: dict) -> str:
 
     untested = [c for c in available if c not in scores]
     if untested:
-        return random.choice(untested)
+        return rng.choice(untested)
 
     weak = [c for c in available if scores.get(c, 5) < 3.5]
     if weak:
-        return random.choice(weak)
+        return rng.choice(weak)
 
-    return random.choice(available)
+    return rng.choice(available)
 
 
 def get_competency_history(state: dict, competency: str) -> str:

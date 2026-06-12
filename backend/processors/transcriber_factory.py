@@ -7,7 +7,15 @@ logger = logging.getLogger(__name__)
 
 
 def create_transcriber():
-    """Pick Whisper backend: NVIDIA CUDA, AMD DirectML, or CPU — never crashes."""
+    """Pick Whisper backend: OpenAI API (cloud), NVIDIA CUDA, AMD DirectML, or CPU."""
+    from config import get_settings
+
+    settings = get_settings()
+    if settings.resolved_whisper_backend == "openai":
+        from processors.openai_transcriber import OpenAIWhisperTranscriber
+
+        return OpenAIWhisperTranscriber()
+
     profile = get_accelerator_profile()
 
     if profile.whisper_backend == "onnx_directml":

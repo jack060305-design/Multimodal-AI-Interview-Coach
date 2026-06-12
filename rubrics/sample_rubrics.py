@@ -3,10 +3,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
+from rubrics.bank_rubrics import BANK_RUBRICS
+from rubrics.registry import build_rubric_index
 from schemas import Role, RubricCriterion, RubricDocument
 
 
-SAMPLE_RUBRICS: list[RubricDocument] = [
+_BASE_RUBRICS: list[RubricDocument] = [
     RubricDocument(
         role=Role.SWE_INTERN,
         question_id="react_useeffect_001",
@@ -226,3 +228,6 @@ SAMPLE_RUBRICS: list[RubricDocument] = [
         ],
     ),
 ]
+
+SAMPLE_RUBRICS: list[RubricDocument] = _BASE_RUBRICS + BANK_RUBRICS
+RUBRIC_BY_ID = build_rubric_index(SAMPLE_RUBRICS)

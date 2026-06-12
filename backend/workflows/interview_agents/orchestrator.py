@@ -13,6 +13,7 @@ from workflows.interview_agents.coach import coach_node
 from workflows.interview_agents.followup import followup_node
 from workflows.interview_agents.grader import grader_node
 from workflows.interview_agents.interviewer import interviewer_node
+from workflows.interview_agents.question_bank import get_question_by_id
 from workflows.interview_agents.routing import route_after_followup, route_after_grader
 from workflows.interview_agents.session_memory import record_turn_embedding
 from workflows.interview_agents.state import InterviewState
@@ -37,6 +38,31 @@ class TurnResult:
 async def run_first_question(state: InterviewState) -> InterviewState:
     state = dict(state)
     state["agent_trace"] = []
+
+    locked_id = state.get("first_question_id")
+    if locked_id:
+        picked = get_question_by_id(state["role"], locked_id)
+        if picked:
+            asked = list(state.get("asked_question_ids", []))
+            if picked.question_id not in asked:
+                asked.append(picked.question_id)
+            state.update(
+                {
+                    "current_question": picked.question,
+                    "current_question_id": picked.question_id,
+                    "current_competency": picked.competency,
+                    "asked_question_ids": asked,
+                    "turn_number": 1,
+                }
+            )
+            state["agent_trace"].append(
+                {
+                    "node": "interviewer",
+                    "decision": f"opening '{picked.question_id}' from bank (preview lock)",
+                }
+            )
+            return state
+
     state.update(await interviewer_node(state))
     state["turn_number"] = 1
     state["agent_trace"].append(

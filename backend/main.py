@@ -18,11 +18,13 @@ from schemas import (
     EvaluationHistoryItem,
     EvaluationResult,
     GpuConsentRequest,
+    InterviewPreviewQuestionResponse,
     InterviewQuestionResponse,
     InterviewSessionCreate,
     InterviewSessionResponse,
     InterviewTurnRequest,
     InterviewTurnResponse,
+    InterviewVideoTurnResponse,
     Role,
 )
 from services.interview_session_service import InterviewSessionService
@@ -74,8 +76,10 @@ app.add_middleware(
 async def health():
     return {
         "status": "ok",
+        "deploy_profile": settings.deploy_profile,
+        "whisper_backend": settings.resolved_whisper_backend,
         "llm_provider": settings.llm_provider,
-        "vector_store": settings.vector_store,
+        "vector_store": settings.resolved_vector_store,
         "storage_backend": settings.storage_backend,
         "db_enabled": settings.db_enabled,
         "langsmith": settings.langsmith_enabled,
@@ -212,6 +216,28 @@ async def evaluate(
         raise HTTPException(500, f"Evaluation failed: {e}") from e
 
 
+@app.get(
+    "/interview/questions/{role}/random",
+    response_model=InterviewPreviewQuestionResponse,
+)
+async def random_interview_question(role: Role, difficulty: int = 3):
+    """Random question from the LangGraph role bank (for Up next preview / shuffle)."""
+    if interview_service is None:
+        raise HTTPException(503, "Service not ready")
+    try:
+        data = interview_service.random_preview(role=role.value, difficulty=difficulty)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    return InterviewPreviewQuestionResponse(
+        role=role,
+        question_id=data["question_id"],
+        question=data["question"],
+        competency=data["competency"],
+        difficulty=data["difficulty"],
+        source=data["source"],
+    )
+
+
 @app.post("/interview/sessions", response_model=InterviewSessionResponse)
 async def create_interview_session(body: InterviewSessionCreate):
     if interview_service is None:
@@ -220,6 +246,7 @@ async def create_interview_session(body: InterviewSessionCreate):
         role=body.role.value,
         max_turns=body.max_turns,
         difficulty=body.difficulty,
+        first_question_id=body.first_question_id,
     )
     return InterviewSessionResponse(
         session_id=data["session_id"],
@@ -249,6 +276,52 @@ async def interview_turn(session_id: str, body: InterviewTurnRequest):
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     return InterviewTurnResponse(**data)
+
+
+@app.post(
+    "/interview/sessions/{session_id}/turn/video",
+    response_model=InterviewVideoTurnResponse,
+)
+async def interview_video_turn(
+    session_id: str,
+    gpu_consent: str | None = Form(None),
+    video: UploadFile = File(...),
+):
+    if interview_service is None or orchestrator is None:
+        raise HTTPException(503, "Service not ready")
+
+    if not video.filename:
+        raise HTTPException(400, "Video file required")
+
+    content = await video.read()
+    if len(content) == 0:
+        raise HTTPException(400, "Empty video file")
+
+    hw = hardware_status_dict()
+    consent = (gpu_consent or "").strip().lower() or None
+    if hw["gpu_available"] and resolve_consent(consent) == "unset":
+        raise HTTPException(
+            428,
+            detail={
+                "message": "GPU consent required before using hardware acceleration.",
+                "gpu_name": hw.get("gpu_name"),
+                "choices": ["once", "always", "never"],
+            },
+        )
+
+    try:
+        data = await interview_service.submit_video_turn(
+            session_id=session_id,
+            video_bytes=content,
+            filename=video.filename,
+            orchestrator=orchestrator,
+            gpu_consent=consent,
+        )
+        return InterviewVideoTurnResponse(**data)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except Exception as e:
+        raise HTTPException(500, f"Video turn failed: {e}") from e
 
 
 @app.get("/interview/sessions/{session_id}")

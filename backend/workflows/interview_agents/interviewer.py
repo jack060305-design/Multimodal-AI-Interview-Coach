@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from workflows.interview_agents.question_bank import pick_competency, search_question_bank
+from workflows.interview_agents.question_bank import (
+    pick_competency,
+    search_question_bank,
+    session_rng,
+)
 from workflows.interview_agents.state import InterviewState
 
 
@@ -15,11 +19,13 @@ async def interviewer_node(state: InterviewState) -> dict:
         }
 
     competency = pick_competency(state)
+    rng = session_rng(state)
     picked = search_question_bank(
         role=state["role"],
         competency=competency,
         difficulty=state.get("difficulty", 3),
         exclude_ids=state.get("asked_question_ids", []),
+        rng=rng,
     )
 
     if not picked:

@@ -1,0 +1,30 @@
+# Render Blueprint — backend API for Vercel frontend (full AI via cloud profile)
+# Dashboard: New > Blueprint > connect this repo
+# Then set OPENAI_API_KEY in Render env and NEXT_PUBLIC_API_URL on Vercel.
+
+services:
+  - type: web
+    name: interview-coach-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.cloud
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DEPLOY_PROFILE
+        value: cloud
+      - key: WHISPER_BACKEND
+        value: openai
+      - key: VECTOR_STORE
+        value: memory
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LLM_MODEL
+        value: gpt-4o-mini
+      - key: DB_ENABLED
+        value: "false"
+      - key: CORS_ORIGINS
+        value: https://interview-coach-nine-sigma.vercel.app,http://localhost:3000
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_WHISPER_MODEL
+        value: whisper-1

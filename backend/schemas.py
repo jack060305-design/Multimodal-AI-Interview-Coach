@@ -138,6 +138,16 @@ class InterviewSessionCreate(BaseModel):
     role: Role
     max_turns: int = Field(default=5, ge=1, le=20)
     difficulty: int = Field(default=3, ge=1, le=5)
+    first_question_id: str | None = None
+
+
+class InterviewPreviewQuestionResponse(BaseModel):
+    role: Role
+    question_id: str
+    question: str
+    competency: str
+    difficulty: int
+    source: str = "langgraph_bank"
 
 
 class InterviewTurnRequest(BaseModel):
@@ -162,6 +172,22 @@ class InterviewQuestionResponse(BaseModel):
 
 
 class InterviewTurnResponse(BaseModel):
+    grading: dict[str, Any]
+    coaching_note: str
+    next_question: str | None = None
+    next_question_id: str | None = None
+    competency: str | None = None
+    is_followup: bool = False
+    route: str
+    session_complete: bool
+    difficulty: int
+    turn_number: int
+    agent_trace: list[dict[str, str]] = []
+
+
+class InterviewVideoTurnResponse(BaseModel):
+    transcript: str
+    evaluation: EvaluationResult
     grading: dict[str, Any]
     coaching_note: str
     next_question: str | None = None

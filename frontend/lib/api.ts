@@ -120,3 +120,51 @@ export async function postEvaluate(
 
   return data;
 }
+
+export type PreviewQuestion = {
+  question_id: string;
+  question: string;
+  competency?: string;
+  source?: string;
+};
+
+export async function fetchRandomQuestion(
+  role: string,
+  difficulty = 3
+): Promise<PreviewQuestion> {
+  return fetchJson<PreviewQuestion>(
+    `/interview/questions/${role}/random?difficulty=${difficulty}`
+  );
+}
+
+export async function postInterviewVideoTurn(
+  sessionId: string,
+  form: FormData
+): Promise<Record<string, unknown>> {
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/interview/sessions/${sessionId}/turn/video`, {
+    method: "POST",
+    body: form,
+  });
+  const data = (await readResponseBody(res)) as Record<string, unknown>;
+
+  if (res.status === 428) {
+    throw new ApiError("GPU consent required", 428);
+  }
+
+  if (!res.ok) {
+    const detail = data?.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : typeof detail === "object" &&
+            detail !== null &&
+            "message" in detail &&
+            typeof (detail as { message: unknown }).message === "string"
+          ? (detail as { message: string }).message
+          : "Video turn failed";
+    throw new ApiError(message, res.status);
+  }
+
+  return data;
+}

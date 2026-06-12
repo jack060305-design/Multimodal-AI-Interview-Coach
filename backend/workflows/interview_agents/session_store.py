@@ -13,7 +13,13 @@ class InterviewSessionStore:
         self._sessions: dict[str, InterviewState] = {}
         self._lock = Lock()
 
-    def create(self, role: str, max_turns: int = 5, difficulty: int = 3) -> InterviewState:
+    def create(
+        self,
+        role: str,
+        max_turns: int = 5,
+        difficulty: int = 3,
+        first_question_id: str | None = None,
+    ) -> InterviewState:
         session_id = str(uuid.uuid4())
         state: InterviewState = {
             "session_id": session_id,
@@ -39,6 +45,7 @@ class InterviewSessionStore:
             "turn_embeddings": [],
             "asked_question_ids": [],
             "agent_trace": [],
+            "first_question_id": first_question_id or "",
         }
         with self._lock:
             self._sessions[session_id] = state

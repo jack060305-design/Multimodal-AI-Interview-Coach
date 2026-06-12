@@ -2,9 +2,14 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, StateGraph
 
+from config import get_settings
 from processors import AudioAnalyzer, CVAnalyzer, VideoProcessor, create_transcriber
+from processors.cloud_analyzer import analyze_transcript_only
+from processors.cloud_media import CloudMediaProcessor
 from rubric_engine.evaluator import RubricEvaluator
 from rubric_engine.store_factory import get_vector_store
+from rubrics.registry import rubric_doc_to_payload
+from rubrics.sample_rubrics import RUBRIC_BY_ID
 from schemas import (
     EvaluationMetrics,
     EvaluationResult,
@@ -33,9 +38,11 @@ class EvaluationGraph:
     """LangGraph workflow for multimodal interview evaluation."""
 
     def __init__(self):
-        self.video_processor = VideoProcessor()
-        self.cv_analyzer = CVAnalyzer()
-        self.audio_analyzer = AudioAnalyzer()
+        self._cloud = get_settings().is_cloud
+        self.video_processor = None if self._cloud else VideoProcessor()
+        self.cloud_media = CloudMediaProcessor() if self._cloud else None
+        self.cv_analyzer = None if self._cloud else CVAnalyzer()
+        self.audio_analyzer = None if self._cloud else AudioAnalyzer()
         self.vector_store = get_vector_store()
         self.evaluator = RubricEvaluator()
         self.graph = self._build()
@@ -78,7 +85,10 @@ class EvaluationGraph:
         return final["result"]
 
     def _extract_media(self, state: GraphState) -> GraphState:
-        state["artifacts"] = self.video_processor.process(state["video_path"])
+        if self._cloud:
+            state["artifacts"] = self.cloud_media.process(state["video_path"])
+        else:
+            state["artifacts"] = self.video_processor.process(state["video_path"])
         return state
 
     def _transcribe(self, state: GraphState) -> GraphState:
@@ -89,12 +99,21 @@ class EvaluationGraph:
         return state
 
     def _analyze_vision(self, state: GraphState) -> GraphState:
+        if self._cloud:
+            state["eye_contact"] = None
+            return state
         state["eye_contact"] = self.cv_analyzer.analyze_frames(
             state["artifacts"].frames_dir
         )
         return state
 
     def _analyze_audio(self, state: GraphState) -> GraphState:
+        if self._cloud:
+            filler, confidence, eye = analyze_transcript_only(state["transcript"])
+            state["eye_contact"] = eye
+            state["filler"] = filler
+            state["confidence"] = confidence
+            return state
         filler, confidence = self.audio_analyzer.analyze(
             str(state["artifacts"].audio_path),
             state["transcript"],
@@ -115,6 +134,10 @@ class EvaluationGraph:
         if not payload:
             retrieved = self.vector_store.retrieve(role, question, k=1)
             payload = retrieved[0] if retrieved else None
+        if not payload and question_id:
+            doc = RUBRIC_BY_ID.get(f"{role.value}:{question_id}")
+            if doc:
+                payload = rubric_doc_to_payload(doc)
         if not payload:
             raise ValueError(
                 f"No rubric found for role={role.value} question={question!r}"

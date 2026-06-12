@@ -6,6 +6,8 @@ import re
 from typing import Any
 
 from rubric_engine.store_factory import get_vector_store
+from rubrics.registry import rubric_doc_to_payload
+from rubrics.sample_rubrics import RUBRIC_BY_ID
 from schemas import Role, TranscriptResult
 from workflows.interview_agents.state import InterviewState
 
@@ -98,6 +100,10 @@ async def grader_node(state: InterviewState) -> dict[str, Any]:
     if not payload:
         retrieved = store.retrieve(role, state["current_question"], k=1)
         payload = retrieved[0] if retrieved else None
+    if not payload and qid:
+        doc = RUBRIC_BY_ID.get(f"{role.value}:{qid}")
+        if doc:
+            payload = rubric_doc_to_payload(doc)
 
     if payload:
         grading = _llm_grade(state, payload, competency) or _local_grade(

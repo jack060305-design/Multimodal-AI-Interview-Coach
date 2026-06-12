@@ -10,24 +10,72 @@
       {
         "question_id": "react_useeffect_001",
         "question": "Explain how React useEffect works and when you would use it."
+      },
+      {
+        "question_id": "swe_intern_debug_001",
+        "question": "How do you approach debugging a production issue?"
+      },
+      {
+        "question_id": "swe_intern_git_001",
+        "question": "Explain a merge conflict and how you resolved one."
+      },
+      {
+        "question_id": "swe_intern_tradeoff_001",
+        "question": "Describe a time you chose a simpler solution over a clever one."
       }
     ],
     "data_analyst": [
       {
         "question_id": "sql_window_functions_001",
         "question": "What are SQL window functions and give an example use case?"
+      },
+      {
+        "question_id": "da_metrics_001",
+        "question": "How do you define and validate a product metric?"
+      },
+      {
+        "question_id": "da_ab_test_001",
+        "question": "Walk through how you would design an A/B test."
+      },
+      {
+        "question_id": "da_stakeholder_001",
+        "question": "Tell me about presenting insights to a non-technical stakeholder."
       }
     ],
     "finance_analyst": [
       {
         "question_id": "dcf_basics_001",
         "question": "Walk me through a basic DCF valuation approach."
+      },
+      {
+        "question_id": "fa_variance_001",
+        "question": "How do you explain a budget variance to leadership?"
+      },
+      {
+        "question_id": "fa_model_001",
+        "question": "What checks do you run before sharing a financial model?"
+      },
+      {
+        "question_id": "fa_assumption_001",
+        "question": "Describe a time a key assumption in your analysis was wrong."
       }
     ],
     "product_manager": [
       {
         "question_id": "prioritization_001",
         "question": "How do you prioritize features on a crowded roadmap?"
+      },
+      {
+        "question_id": "pm_discovery_001",
+        "question": "How do you run discovery when requirements are ambiguous?"
+      },
+      {
+        "question_id": "pm_roadmap_001",
+        "question": "Describe balancing tech debt against new features."
+      },
+      {
+        "question_id": "pm_conflict_001",
+        "question": "Tell me about aligning engineering and sales on priorities."
       }
     ]
   }
