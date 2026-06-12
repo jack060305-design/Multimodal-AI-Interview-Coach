@@ -61,7 +61,7 @@ export default function VideoRecorder({ onRecorded, disabled }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-2xl border border-slate-700 bg-black aspect-video">
+      <div className="relative overflow-hidden rounded-2xl border border-coach-mist bg-black aspect-video shadow-sm">
         <video
           ref={videoRef}
           autoPlay
@@ -76,14 +76,14 @@ export default function VideoRecorder({ onRecorded, disabled }: Props) {
           </span>
         )}
       </div>
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex gap-3">
         {!recording ? (
           <button
             type="button"
             onClick={startRecording}
             disabled={disabled || !stream}
-            className="rounded-xl bg-indigo-500 px-5 py-2.5 text-sm font-semibold hover:bg-indigo-400 disabled:opacity-50"
+            className="rounded-xl bg-coach-blue px-5 py-2.5 text-sm font-semibold text-white hover:bg-coach-cyan disabled:opacity-50"
           >
             Start Recording
           </button>
