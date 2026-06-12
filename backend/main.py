@@ -14,7 +14,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import get_settings
 from db.database import get_db, init_db
 from db.repository import EvaluationRepository
-from schemas import EvaluationHistoryItem, EvaluationResult, GpuConsentRequest, Role
+from schemas import (
+    EvaluationHistoryItem,
+    EvaluationResult,
+    GpuConsentRequest,
+    InterviewQuestionResponse,
+    InterviewSessionCreate,
+    InterviewSessionResponse,
+    InterviewTurnRequest,
+    InterviewTurnResponse,
+    Role,
+)
+from services.interview_session_service import InterviewSessionService
 from services.orchestrator import EvaluationOrchestrator
 from tracing.langsmith_setup import configure_langsmith
 from utils.device import accelerator_status_dict, hardware_status_dict, log_accelerator_profile
@@ -25,15 +36,17 @@ logging.basicConfig(level=logging.INFO)
 configure_langsmith()
 
 orchestrator: EvaluationOrchestrator | None = None
+interview_service: InterviewSessionService | None = None
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global orchestrator
+    global orchestrator, interview_service
     log_accelerator_profile()
     init_db()
     orchestrator = EvaluationOrchestrator()
+    interview_service = InterviewSessionService()
     yield
 
 
@@ -199,15 +212,136 @@ async def evaluate(
         raise HTTPException(500, f"Evaluation failed: {e}") from e
 
 
+@app.post("/interview/sessions", response_model=InterviewSessionResponse)
+async def create_interview_session(body: InterviewSessionCreate):
+    if interview_service is None:
+        raise HTTPException(503, "Service not ready")
+    data = interview_service.create_session(
+        role=body.role.value,
+        max_turns=body.max_turns,
+        difficulty=body.difficulty,
+    )
+    return InterviewSessionResponse(
+        session_id=data["session_id"],
+        role=body.role,
+        max_turns=data["max_turns"],
+        difficulty=data["difficulty"],
+    )
+
+
+@app.post("/interview/sessions/{session_id}/start", response_model=InterviewQuestionResponse)
+async def start_interview_session(session_id: str):
+    if interview_service is None:
+        raise HTTPException(503, "Service not ready")
+    try:
+        data = await interview_service.start(session_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    return InterviewQuestionResponse(**data)
+
+
+@app.post("/interview/sessions/{session_id}/turn", response_model=InterviewTurnResponse)
+async def interview_turn(session_id: str, body: InterviewTurnRequest):
+    if interview_service is None:
+        raise HTTPException(503, "Service not ready")
+    try:
+        data = await interview_service.submit_answer(session_id, body.answer)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return InterviewTurnResponse(**data)
+
+
+@app.get("/interview/sessions/{session_id}")
+async def get_interview_session(session_id: str):
+    if interview_service is None:
+        raise HTTPException(503, "Service not ready")
+    data = interview_service.get_session(session_id)
+    if not data:
+        raise HTTPException(404, "Session not found")
+    return data
+
+
+@app.websocket("/ws/interview/{session_id}")
+async def interview_live_stream(websocket: WebSocket, session_id: str):
+    """
+    WebRTC-adjacent live interview channel (Friday-style).
+    Protocol: start | answer | ping  →  question | turn_result | error
+    """
+    await websocket.accept()
+    if interview_service is None:
+        await websocket.send_json({"type": "error", "message": "Service not ready"})
+        await websocket.close()
+        return
+
+    if interview_service.get_session(session_id) is None:
+        from workflows.interview_agents import session_store
+
+        if session_store.get(session_id) is None:
+            await websocket.send_json({"type": "error", "message": "Session not found"})
+            await websocket.close()
+            return
+
+    try:
+        await websocket.send_json({"type": "connected", "session_id": session_id})
+
+        while True:
+            raw = await websocket.receive_json()
+            msg_type = raw.get("type", "")
+
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
+
+            if msg_type == "start":
+                data = await interview_service.start(session_id)
+                await websocket.send_json({"type": "question", **data})
+                continue
+
+            if msg_type == "answer":
+                answer = (raw.get("answer") or "").strip()
+                if not answer:
+                    await websocket.send_json({"type": "error", "message": "Empty answer"})
+                    continue
+                data = await interview_service.submit_answer(session_id, answer)
+                await websocket.send_json({"type": "turn_result", **data})
+                if data.get("session_complete"):
+                    summary = interview_service.get_session(session_id)
+                    await websocket.send_json({"type": "session_complete", "summary": summary})
+                elif data.get("next_question"):
+                    await websocket.send_json(
+                        {
+                            "type": "question",
+                            "session_id": session_id,
+                            "question": data["next_question"],
+                            "question_id": data.get("next_question_id"),
+                            "competency": data.get("competency"),
+                            "difficulty": data.get("difficulty"),
+                            "turn_number": data.get("turn_number"),
+                            "agent_trace": data.get("agent_trace", []),
+                        }
+                    )
+                continue
+
+            await websocket.send_json(
+                {"type": "error", "message": f"Unknown message type: {msg_type}"}
+            )
+    except WebSocketDisconnect:
+        pass
+    except ValueError as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": f"Interview stream failed: {e}"})
+
+
 @app.websocket("/ws/evaluation-progress")
 async def evaluation_progress(websocket: WebSocket):
-    """Optional real-time progress channel (WebRTC-adjacent streaming UX)."""
+    """Optional real-time progress channel for video evaluation."""
     await websocket.accept()
     try:
         await websocket.send_json(
             {
                 "type": "connected",
-                "message": "Submit video via POST /evaluate. Progress events coming soon.",
+                "message": "Submit video via POST /evaluate for multimodal scoring.",
             }
         )
         while True:

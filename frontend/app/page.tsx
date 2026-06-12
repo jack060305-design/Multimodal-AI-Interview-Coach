@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import GpuConsentModal, { GpuStatus } from "@/components/GpuConsentModal";
 import ResultsPanel from "@/components/ResultsPanel";
+import LiveInterview from "@/components/LiveInterview";
 import VideoRecorder from "@/components/VideoRecorder";
 import {
   ApiError,
@@ -34,6 +35,7 @@ export default function Home() {
   const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
   const [consentModalOpen, setConsentModalOpen] = useState(false);
   const [pendingConsent, setPendingConsent] = useState<GpuConsent | null>(null);
+  const [mode, setMode] = useState<"record" | "live">("record");
 
   useEffect(() => {
     setLoadingCatalog(true);
@@ -194,6 +196,27 @@ export default function Home() {
         )}
       </header>
 
+      <div className="mb-6 flex gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-1">
+        <button
+          type="button"
+          onClick={() => setMode("record")}
+          className={`flex-1 rounded-lg py-2 text-sm font-medium ${
+            mode === "record" ? "bg-emerald-500 text-black" : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Record &amp; evaluate
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("live")}
+          className={`flex-1 rounded-lg py-2 text-sm font-medium ${
+            mode === "live" ? "bg-indigo-500 text-white" : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Live interview (LangGraph)
+        </button>
+      </div>
+
       <div className="grid gap-8 lg:grid-cols-2">
         <section className="space-y-5">
           <div>
@@ -215,40 +238,46 @@ export default function Home() {
             </select>
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm text-slate-400">Question</label>
-            <select
-              value={questionId}
-              onChange={(e) => setQuestionId(e.target.value)}
-              disabled={!role}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 disabled:opacity-50"
-            >
-              {questions.map((q) => (
-                <option key={q.question_id} value={q.question_id}>
-                  {q.question}
-                </option>
-              ))}
-            </select>
-          </div>
+          {mode === "record" ? (
+            <>
+              <div>
+                <label className="mb-1 block text-sm text-slate-400">Question</label>
+                <select
+                  value={questionId}
+                  onChange={(e) => setQuestionId(e.target.value)}
+                  disabled={!role}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 disabled:opacity-50"
+                >
+                  {questions.map((q) => (
+                    <option key={q.question_id} value={q.question_id}>
+                      {q.question}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <VideoRecorder onRecorded={onRecorded} disabled={loading} />
+              <VideoRecorder onRecorded={onRecorded} disabled={loading} />
 
-          {videoBlob && (
-            <p className="text-sm text-emerald-400">
-              Recording ready ({Math.round(videoBlob.size / 1024)} KB)
-            </p>
+              {videoBlob && (
+                <p className="text-sm text-emerald-400">
+                  Recording ready ({Math.round(videoBlob.size / 1024)} KB)
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={submit}
+                disabled={loading || !videoBlob || !role || !questionId}
+                className="w-full rounded-xl bg-emerald-500 py-3 font-semibold hover:bg-emerald-400 disabled:opacity-50"
+              >
+                {loading ? "Analyzing..." : "Submit for Evaluation"}
+              </button>
+            </>
+          ) : (
+            <LiveInterview role={role} disabled={loading || !role} />
           )}
 
-          <button
-            type="button"
-            onClick={submit}
-            disabled={loading || !videoBlob || !role || !questionId}
-            className="w-full rounded-xl bg-emerald-500 py-3 font-semibold hover:bg-emerald-400 disabled:opacity-50"
-          >
-            {loading ? "Analyzing..." : "Submit for Evaluation"}
-          </button>
-
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && mode === "record" && <p className="text-sm text-red-400">{error}</p>}
         </section>
 
         <section>

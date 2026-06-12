@@ -134,6 +134,47 @@ class GpuConsentRequest(BaseModel):
     choice: str = Field(description="always | never | reset")
 
 
+class InterviewSessionCreate(BaseModel):
+    role: Role
+    max_turns: int = Field(default=5, ge=1, le=20)
+    difficulty: int = Field(default=3, ge=1, le=5)
+
+
+class InterviewTurnRequest(BaseModel):
+    answer: str = Field(min_length=1)
+
+
+class InterviewSessionResponse(BaseModel):
+    session_id: str
+    role: Role
+    max_turns: int
+    difficulty: int
+
+
+class InterviewQuestionResponse(BaseModel):
+    session_id: str
+    question: str
+    question_id: str | None = None
+    competency: str | None = None
+    difficulty: int
+    turn_number: int
+    agent_trace: list[dict[str, str]] = []
+
+
+class InterviewTurnResponse(BaseModel):
+    grading: dict[str, Any]
+    coaching_note: str
+    next_question: str | None = None
+    next_question_id: str | None = None
+    competency: str | None = None
+    is_followup: bool = False
+    route: str
+    session_complete: bool
+    difficulty: int
+    turn_number: int
+    agent_trace: list[dict[str, str]] = []
+
+
 class EvaluationHistoryItem(BaseModel):
     evaluation_id: UUID
     role: Role
