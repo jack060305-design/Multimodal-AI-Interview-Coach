@@ -29,6 +29,8 @@ from schemas import (
 )
 from services.interview_session_service import InterviewSessionService
 from services.orchestrator import EvaluationOrchestrator
+from services.question_feed_sync import maybe_sync_on_startup, sync_question_feed
+from services.daily_question_scheduler import start_daily_scheduler, stop_daily_scheduler
 from tracing.langsmith_setup import configure_langsmith
 from utils.device import accelerator_status_dict, hardware_status_dict, log_accelerator_profile
 from utils.gpu_consent import clear_stored_consent, consent_status, resolve_consent, save_stored_consent
@@ -47,9 +49,12 @@ async def lifespan(app: FastAPI):
     global orchestrator, interview_service
     log_accelerator_profile()
     init_db()
+    maybe_sync_on_startup()
+    start_daily_scheduler()
     orchestrator = EvaluationOrchestrator()
     interview_service = InterviewSessionService()
     yield
+    stop_daily_scheduler()
 
 
 app = FastAPI(
@@ -119,16 +124,80 @@ async def list_roles():
     }
 
 
+@app.get("/questions/feed/status")
+async def question_feed_status():
+    from rubrics.external_feed_loader import feed_status
+    from workflows.interview_agents.question_bank import QUESTION_BANK, all_questions_for_role
+
+    status = feed_status()
+    status["bank_counts"] = {
+        role: len(all_questions_for_role(role)) for role in QUESTION_BANK
+    }
+    return status
+
+
+@app.post("/questions/feed/sync")
+async def question_feed_sync(force: bool = False):
+    try:
+        return sync_question_feed(force=force)
+    except Exception as exc:
+        raise HTTPException(500, f"Feed sync failed: {exc}") from exc
+
+
+@app.get("/questions/daily/status")
+async def daily_questions_status():
+    from services.daily_question_generator import llm_daily_status
+    from workflows.interview_agents.question_bank import QUESTION_BANK, all_questions_for_role
+
+    status = llm_daily_status()
+    status["enabled"] = settings.daily_questions_enabled
+    status["cron_utc"] = settings.daily_questions_cron
+    status["per_role"] = settings.daily_questions_per_role
+    status["mode"] = settings.daily_questions_mode
+    status["max_revisions"] = settings.daily_questions_max_revisions
+    status["agents"] = ["planner", "researcher", "generator", "critic"]
+    status["bank_counts"] = {
+        role: len(all_questions_for_role(role)) for role in QUESTION_BANK
+    }
+    return status
+
+
+@app.post("/questions/daily/generate")
+async def daily_questions_generate(force: bool = False):
+    from services.daily_question_generator import generate_daily_questions
+
+    try:
+        return generate_daily_questions(force=force)
+    except Exception as exc:
+        raise HTTPException(500, f"Daily LLM generation failed: {exc}") from exc
+
+
+@app.post("/questions/daily/run")
+async def daily_questions_run(force: bool = False):
+    from services.daily_question_pipeline import run_daily_question_pipeline
+
+    try:
+        return run_daily_question_pipeline(force=force)
+    except Exception as exc:
+        raise HTTPException(500, f"Daily pipeline failed: {exc}") from exc
+
+
 @app.get("/questions/{role}")
 async def list_questions(role: Role):
     from rubrics.sample_rubrics import SAMPLE_RUBRICS
+    from workflows.interview_agents.question_bank import all_questions_for_role
 
     questions = [
         {"question_id": r.question_id, "question": r.question}
         for r in SAMPLE_RUBRICS
         if r.role == role
     ]
-    return {"role": role.value, "questions": questions}
+    bank = all_questions_for_role(role.value)
+    return {
+        "role": role.value,
+        "questions": questions,
+        "total_in_bank": len(bank),
+    }
 
 
 @app.get("/evaluations", response_model=list[EvaluationHistoryItem])

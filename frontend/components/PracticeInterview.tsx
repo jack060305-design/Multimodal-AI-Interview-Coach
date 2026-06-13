@@ -8,6 +8,8 @@ import {
   ApiError,
   fetchJson,
   fetchRandomQuestion,
+  fetchQuestionFeedStatus,
+  fetchDailyQuestionStatus,
   hasApiBackend,
   loadDemoEvaluation,
   postInterviewVideoTurn,
@@ -54,6 +56,19 @@ export default function PracticeInterview() {
   const [turnGrading, setTurnGrading] = useState<Record<string, unknown> | null>(null);
 
   const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
+  const [feedStatus, setFeedStatus] = useState<{
+    total: number;
+    bank_counts: Record<string, number>;
+    synced_at: string | null;
+  } | null>(null);
+  const [dailyStatus, setDailyStatus] = useState<{
+    theme_today: string;
+    total: number;
+    generated_at: string | null;
+    mode: string;
+    llm_calls_last_run?: number | null;
+    agent_trace?: Array<{ node: string; decision: string }> | null;
+  } | null>(null);
   const [consentModalOpen, setConsentModalOpen] = useState(false);
   const [pendingConsent, setPendingConsent] = useState<GpuConsent | null>(null);
 
@@ -133,6 +148,27 @@ export default function PracticeInterview() {
     if (hasApiBackend()) {
       fetchJson<GpuStatus>("/gpu/status")
         .then((d) => setGpuStatus(d))
+        .catch(() => null);
+      fetchQuestionFeedStatus()
+        .then((d) =>
+          setFeedStatus({
+            total: d.total,
+            bank_counts: d.bank_counts,
+            synced_at: d.synced_at,
+          })
+        )
+        .catch(() => null);
+      fetchDailyQuestionStatus()
+        .then((d) =>
+          setDailyStatus({
+            theme_today: d.theme_today,
+            total: d.total,
+            generated_at: d.generated_at,
+            mode: d.mode,
+            llm_calls_last_run: d.llm_calls_last_run,
+            agent_trace: d.agent_trace,
+          })
+        )
         .catch(() => null);
     }
   }, []);
@@ -340,6 +376,22 @@ export default function PracticeInterview() {
           LangGraph picks questions from the role bank — shuffle for a new prompt, then start when
           you are ready. After each answer the graph advances to the next question.
         </p>
+        {feedStatus && role && feedStatus.bank_counts[role] != null && (
+          <p className="mt-2 text-xs text-slate-500">
+            Question bank: {feedStatus.bank_counts[role]} prompts for this role
+            {feedStatus.synced_at
+              ? ` · external feed synced ${new Date(feedStatus.synced_at).toLocaleDateString()}`
+              : ""}
+            {dailyStatus?.theme_today
+              ? ` · daily theme: ${dailyStatus.theme_today}`
+              : ""}
+            {dailyStatus?.mode === "agentic"
+              ? ` · LangGraph agents (${dailyStatus.llm_calls_last_run ?? "?"} LLM calls)`
+              : dailyStatus?.total
+                ? ` · ${dailyStatus.total} LLM questions cached`
+                : ""}
+          </p>
+        )}
         {!hasApiBackend() && (
           <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             Demo mode — connect a backend API for full Whisper + LangGraph scoring.

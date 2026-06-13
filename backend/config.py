@@ -52,6 +52,16 @@ class Settings:
 
     cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
 
+    # Daily LLM question generation (Scheduled Job + LLM)
+    daily_questions_enabled: bool = (
+        os.getenv("DAILY_QUESTIONS_ENABLED", "true").lower() == "true"
+    )
+    daily_questions_cron: str = os.getenv("DAILY_QUESTIONS_CRON", "0 6 * * *")
+    daily_questions_per_role: int = int(os.getenv("DAILY_QUESTIONS_PER_ROLE", "3"))
+    # agentic = LangGraph Planner/Researcher/Generator/Critic; simple = one-shot LLM per role
+    daily_questions_mode: str = os.getenv("DAILY_QUESTIONS_MODE", "agentic").lower()
+    daily_questions_max_revisions: int = int(os.getenv("DAILY_QUESTIONS_MAX_REVISIONS", "1"))
+
     @property
     def is_cloud(self) -> bool:
         return self.deploy_profile == "cloud"

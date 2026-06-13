@@ -1,0 +1,153 @@
+# GitHub Actions deploy — no local Docker needed (build runs on ubuntu-latest).
+# Required secrets (see azure/setup-github-actions.ps1):
+#   AZURE_CREDENTIALS  — service principal JSON
+#   ACR_NAME           — e.g. ca57dcca1882acr
+#   AZURE_RG           — rg-interview-coach-jack0
+#   AZURE_LOCATION     — westus2
+#   CONTAINERAPPS_ENV  — ic-jack0-env
+# Optional:
+#   OPENAI_API_KEY     — for Whisper + agentic daily questions
+
+name: Deploy to Azure Container Apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "backend/**"
+      - "rubrics/**"
+      - "Dockerfile.cloud"
+      - ".github/workflows/azure-deploy.yml"
+
+env:
+  IMAGE_NAME: interview-coach
+  APP_NAME: interview-coach-api
+  JOB_NAME: interview-coach-api-daily
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Build and push image
+        run: |
+          IMAGE=${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker build -f Dockerfile.cloud -t "$IMAGE" -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest .
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Deploy Container App
+        run: |
+          RG="${{ secrets.AZURE_RG }}"
+          ENV_NAME="${{ secrets.CONTAINERAPPS_ENV }}"
+          ACR="${{ secrets.ACR_NAME }}"
+          IMAGE="$ACR.azurecr.io/${{ env.IMAGE_NAME }}:latest"
+          ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
+
+          ENV_VARS=(
+            "DEPLOY_PROFILE=cloud"
+            "WHISPER_BACKEND=openai"
+            "VECTOR_STORE=memory"
+            "LLM_PROVIDER=openai"
+            "LLM_MODEL=gpt-4o-mini"
+            "DB_ENABLED=false"
+            "DAILY_QUESTIONS_MODE=agentic"
+            "DAILY_QUESTIONS_ENABLED=false"
+            "DAILY_QUESTIONS_PER_ROLE=3"
+            "DAILY_QUESTIONS_MAX_REVISIONS=1"
+            "CORS_ORIGINS=http://localhost:3000,https://multimodal-ai-interview-coach.vercel.app"
+            "WORK_DIR=/tmp/interview-work"
+            "LOCAL_STORAGE_DIR=/tmp/interview-uploads"
+          )
+          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+            ENV_VARS+=("OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}")
+          fi
+
+          EXISTS=$(az containerapp show -g "$RG" -n "${{ env.APP_NAME }}" --query name -o tsv 2>/dev/null || true)
+          if [ -z "$EXISTS" ]; then
+            az containerapp create \
+              -g "$RG" -n "${{ env.APP_NAME }}" \
+              --environment "$ENV_NAME" \
+              --image "$IMAGE" \
+              --registry-server "$ACR.azurecr.io" \
+              --registry-username "$ACR" \
+              --registry-password "$ACR_PASS" \
+              --target-port 8000 \
+              --ingress external \
+              --min-replicas 0 \
+              --max-replicas 2 \
+              --cpu 0.5 --memory 1.0Gi \
+              --env-vars "${ENV_VARS[@]}"
+          else
+            az containerapp update \
+              -g "$RG" -n "${{ env.APP_NAME }}" \
+              --image "$IMAGE" \
+              --set-env-vars "${ENV_VARS[@]}"
+          fi
+
+      - name: Deploy daily job (agentic pipeline)
+        run: |
+          RG="${{ secrets.AZURE_RG }}"
+          ENV_NAME="${{ secrets.CONTAINERAPPS_ENV }}"
+          ACR="${{ secrets.ACR_NAME }}"
+          IMAGE="$ACR.azurecr.io/${{ env.IMAGE_NAME }}:latest"
+          ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
+
+          JOB_ENV=(
+            "DEPLOY_PROFILE=cloud"
+            "LLM_PROVIDER=openai"
+            "LLM_MODEL=gpt-4o-mini"
+            "DB_ENABLED=false"
+            "DAILY_QUESTIONS_ENABLED=true"
+            "DAILY_QUESTIONS_MODE=agentic"
+            "DAILY_QUESTIONS_PER_ROLE=3"
+            "DAILY_QUESTIONS_MAX_REVISIONS=1"
+          )
+          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+            JOB_ENV+=("OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}")
+          fi
+
+          EXISTS=$(az containerapp job show -g "$RG" -n "${{ env.JOB_NAME }}" --query name -o tsv 2>/dev/null || true)
+          if [ -z "$EXISTS" ]; then
+            az containerapp job create \
+              -g "$RG" -n "${{ env.JOB_NAME }}" \
+              --environment "$ENV_NAME" \
+              --trigger-type Schedule \
+              --cron-expression "0 6 * * *" \
+              --replica-timeout 900 \
+              --replica-retry-limit 2 \
+              --parallelism 1 \
+              --replica-completion-count 1 \
+              --image "$IMAGE" \
+              --registry-server "$ACR.azurecr.io" \
+              --registry-username "$ACR" \
+              --registry-password "$ACR_PASS" \
+              --cpu 0.5 --memory 1.0Gi \
+              --command "python" \
+              --args "jobs/run_daily_questions.py" \
+              --env-vars "${JOB_ENV[@]}"
+          else
+            az containerapp job update \
+              -g "$RG" -n "${{ env.JOB_NAME }}" \
+              --image "$IMAGE" \
+              --set-env-vars "${JOB_ENV[@]}"
+          fi
+
+      - name: Print API URL
+        run: |
+          FQDN=$(az containerapp show -g "${{ secrets.AZURE_RG }}" -n "${{ env.APP_NAME }}" --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "### Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- API: https://$FQDN" >> $GITHUB_STEP_SUMMARY
+          echo "- Health: https://$FQDN/health" >> $GITHUB_STEP_SUMMARY
+          echo "- Daily status: https://$FQDN/questions/daily/status" >> $GITHUB_STEP_SUMMARY

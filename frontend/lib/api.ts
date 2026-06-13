@@ -137,6 +137,39 @@ export async function fetchRandomQuestion(
   );
 }
 
+export type QuestionFeedStatus = {
+  synced_at: string | null;
+  total: number;
+  by_role: Record<string, number>;
+  bank_counts: Record<string, number>;
+  attribution?: string[];
+};
+
+export type DailyQuestionStatus = {
+  generated_at: string | null;
+  total: number;
+  by_role: Record<string, number>;
+  theme_today: string;
+  enabled: boolean;
+  cron_utc: string;
+  per_role: number;
+  mode: string;
+  max_revisions: number;
+  agents: string[];
+  llm_calls_last_run?: number | null;
+  agent_trace?: Array<{ node: string; decision: string }> | null;
+  critic_notes?: string | null;
+  bank_counts: Record<string, number>;
+};
+
+export async function fetchQuestionFeedStatus(): Promise<QuestionFeedStatus> {
+  return fetchJson<QuestionFeedStatus>("/questions/feed/status");
+}
+
+export async function fetchDailyQuestionStatus(): Promise<DailyQuestionStatus> {
+  return fetchJson<DailyQuestionStatus>("/questions/daily/status");
+}
+
 export async function postInterviewVideoTurn(
   sessionId: string,
   form: FormData

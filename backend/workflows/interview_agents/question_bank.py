@@ -1,4 +1,4 @@
-"""Role-based question bank (Friday-style) backed by rubrics + extra prompts."""
+"""Role-based question bank (Friday-style) backed by rubrics + external feeds."""
 
 from __future__ import annotations
 
@@ -6,6 +6,9 @@ import random
 from dataclasses import dataclass
 
 from rubrics.bank_rubrics import BANK_QUESTION_META, BANK_RUBRICS
+from rubrics.external_feed_loader import external_question_meta
+from rubrics.job_search_rubrics import JOB_SEARCH_META
+from rubrics.llm_daily_loader import llm_daily_question_meta, llm_daily_question_sources
 from rubrics.sample_rubrics import SAMPLE_RUBRICS
 from schemas import Role
 
@@ -17,6 +20,15 @@ class BankQuestion:
     competency: str
     difficulty: int
     role: Role
+    source: str = "local"
+
+
+def _question_meta() -> dict[str, tuple[str, int]]:
+    meta = dict(BANK_QUESTION_META)
+    meta.update(JOB_SEARCH_META)
+    meta.update(external_question_meta())
+    meta.update(llm_daily_question_meta())
+    return meta
 
 
 def _competency_from_rubric(doc) -> str:
@@ -25,25 +37,37 @@ def _competency_from_rubric(doc) -> str:
     return "general"
 
 
+def _source_for(doc) -> str:
+    qid = doc.question_id
+    if qid.startswith("feed_"):
+        return "external_feed"
+    if qid.startswith("llm_"):
+        return llm_daily_question_sources().get(qid, "llm_daily")
+    if qid.endswith("_job_") or "_job_" in qid:
+        return "job_search"
+    if qid in BANK_QUESTION_META:
+        return "langgraph_bank"
+    return "core_rubric"
+
+
 def _build_bank() -> dict[str, dict[str, list[BankQuestion]]]:
     bank: dict[str, dict[str, list[BankQuestion]]] = {}
+    meta = _question_meta()
+    seen: set[tuple[str, str]] = set()
 
     for doc in SAMPLE_RUBRICS:
         role_key = doc.role.value
-        competency = _competency_from_rubric(doc)
-        bank.setdefault(role_key, {}).setdefault(competency, []).append(
-            BankQuestion(
-                question_id=doc.question_id,
-                question=doc.question,
-                competency=competency,
-                difficulty=3,
-                role=doc.role,
-            )
-        )
+        key = (role_key, doc.question_id)
+        if key in seen:
+            continue
+        seen.add(key)
 
-    for doc in BANK_RUBRICS:
-        role_key = doc.role.value
-        competency, difficulty = BANK_QUESTION_META[doc.question_id]
+        if doc.question_id in meta:
+            competency, difficulty = meta[doc.question_id]
+        else:
+            competency = _competency_from_rubric(doc)
+            difficulty = 3
+
         bank.setdefault(role_key, {}).setdefault(competency, []).append(
             BankQuestion(
                 question_id=doc.question_id,
@@ -51,6 +75,7 @@ def _build_bank() -> dict[str, dict[str, list[BankQuestion]]]:
                 competency=competency,
                 difficulty=difficulty,
                 role=doc.role,
+                source=_source_for(doc),
             )
         )
 
@@ -59,6 +84,13 @@ def _build_bank() -> dict[str, dict[str, list[BankQuestion]]]:
 
 QUESTION_BANK = _build_bank()
 DEFAULT_QUESTION_BUDGET = 2
+
+
+def reload_bank() -> dict[str, int]:
+    """Rebuild runtime bank after rubric/feed reload."""
+    global QUESTION_BANK
+    QUESTION_BANK = _build_bank()
+    return {role: len(all_questions_for_role(role)) for role in QUESTION_BANK}
 
 
 def competencies_for_role(role: str) -> list[str]:

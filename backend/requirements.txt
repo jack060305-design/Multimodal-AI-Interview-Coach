@@ -31,3 +31,6 @@ google-genai>=1.0.0
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.9
 boto3>=1.34.0
+
+# Scheduled jobs (daily LLM question generation)
+apscheduler>=3.10.4

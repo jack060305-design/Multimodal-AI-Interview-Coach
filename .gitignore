@@ -17,6 +17,8 @@ frontend/out/
 .env
 backend/.env
 frontend/.env.local
+azure/azure-credentials.json
+azure/setup-output.txt
 
 # Vercel
 .vercel/

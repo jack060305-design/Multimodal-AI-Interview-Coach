@@ -4,6 +4,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from rubrics.bank_rubrics import BANK_RUBRICS
+from rubrics.external_feed_loader import external_question_meta, load_external_rubrics
+from rubrics.job_search_rubrics import JOB_SEARCH_RUBRICS
 from rubrics.registry import build_rubric_index
 from schemas import Role, RubricCriterion, RubricDocument
 
@@ -229,5 +231,26 @@ _BASE_RUBRICS: list[RubricDocument] = [
     ),
 ]
 
-SAMPLE_RUBRICS: list[RubricDocument] = _BASE_RUBRICS + BANK_RUBRICS
+def _compose_rubrics() -> list[RubricDocument]:
+    from rubrics.external_feed_loader import load_external_rubrics
+    from rubrics.llm_daily_loader import load_llm_daily_rubrics
+
+    return (
+        _BASE_RUBRICS
+        + BANK_RUBRICS
+        + JOB_SEARCH_RUBRICS
+        + load_external_rubrics()
+        + load_llm_daily_rubrics()
+    )
+
+
+SAMPLE_RUBRICS: list[RubricDocument] = _compose_rubrics()
 RUBRIC_BY_ID = build_rubric_index(SAMPLE_RUBRICS)
+
+
+def reload_rubrics() -> int:
+    """Rebuild in-memory rubric index after external feed sync."""
+    global SAMPLE_RUBRICS, RUBRIC_BY_ID
+    SAMPLE_RUBRICS = _compose_rubrics()
+    RUBRIC_BY_ID = build_rubric_index(SAMPLE_RUBRICS)
+    return len(SAMPLE_RUBRICS)
