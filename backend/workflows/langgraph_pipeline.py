@@ -3,9 +3,9 @@ from typing import Any, TypedDict
 from langgraph.graph import END, StateGraph
 
 from config import get_settings
-from processors import AudioAnalyzer, CVAnalyzer, VideoProcessor, create_transcriber
 from processors.cloud_analyzer import analyze_transcript_only
 from processors.cloud_media import CloudMediaProcessor
+from processors.transcriber_factory import create_transcriber
 from rubric_engine.evaluator import RubricEvaluator
 from rubric_engine.store_factory import get_vector_store
 from rubrics.registry import rubric_doc_to_payload
@@ -39,10 +39,18 @@ class EvaluationGraph:
 
     def __init__(self):
         self._cloud = get_settings().is_cloud
-        self.video_processor = None if self._cloud else VideoProcessor()
-        self.cloud_media = CloudMediaProcessor() if self._cloud else None
-        self.cv_analyzer = None if self._cloud else CVAnalyzer()
-        self.audio_analyzer = None if self._cloud else AudioAnalyzer()
+        if self._cloud:
+            self.video_processor = None
+            self.cloud_media = CloudMediaProcessor()
+            self.cv_analyzer = None
+            self.audio_analyzer = None
+        else:
+            from processors import AudioAnalyzer, CVAnalyzer, VideoProcessor
+
+            self.video_processor = VideoProcessor()
+            self.cloud_media = None
+            self.cv_analyzer = CVAnalyzer()
+            self.audio_analyzer = AudioAnalyzer()
         self.vector_store = get_vector_store()
         self.evaluator = RubricEvaluator()
         self.graph = self._build()

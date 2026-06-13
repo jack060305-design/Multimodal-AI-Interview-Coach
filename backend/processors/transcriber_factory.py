@@ -1,6 +1,5 @@
 import logging
 
-from processors.transcriber import WhisperTranscriber
 from utils.device import get_accelerator_profile
 
 logger = logging.getLogger(__name__)
@@ -28,5 +27,7 @@ def create_transcriber():
                 "AMD DirectML Whisper unavailable (%s) — falling back to CPU faster-whisper",
                 exc,
             )
+
+    from processors.transcriber import WhisperTranscriber
 
     return WhisperTranscriber()

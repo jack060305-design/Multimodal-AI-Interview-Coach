@@ -52,7 +52,7 @@ jobs:
           RG="${{ secrets.AZURE_RG }}"
           ENV_NAME="${{ secrets.CONTAINERAPPS_ENV }}"
           ACR="${{ secrets.ACR_NAME }}"
-          IMAGE="$ACR.azurecr.io/${{ env.IMAGE_NAME }}:latest"
+          IMAGE="${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
 
           ENV_VARS=(
@@ -101,7 +101,7 @@ jobs:
           RG="${{ secrets.AZURE_RG }}"
           ENV_NAME="${{ secrets.CONTAINERAPPS_ENV }}"
           ACR="${{ secrets.ACR_NAME }}"
-          IMAGE="$ACR.azurecr.io/${{ env.IMAGE_NAME }}:latest"
+          IMAGE="${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
 
           JOB_ENV=(
