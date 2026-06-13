@@ -12,6 +12,24 @@ _engine = None
 _SessionLocal = None
 
 
+def _migrate_schema(engine) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    if "evaluations" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("evaluations")}
+    if "user_id" not in cols:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE evaluations ADD COLUMN user_id UUID "
+                    "REFERENCES users(id) ON DELETE SET NULL"
+                )
+            )
+        logger.info("Migrated evaluations.user_id column")
+
+
 def init_db() -> bool:
     global _engine, _SessionLocal
     settings = get_settings()
@@ -20,8 +38,14 @@ def init_db() -> bool:
         return False
 
     try:
-        _engine = create_engine(settings.database_url, pool_pre_ping=True)
+        url = settings.database_url
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif url.startswith("postgresql://") and "+psycopg2" not in url:
+            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        _engine = create_engine(url, pool_pre_ping=True)
         Base.metadata.create_all(bind=_engine)
+        _migrate_schema(_engine)
         _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
         logger.info("Postgres connected and tables ready")
         return True
@@ -36,3 +60,15 @@ def get_db() -> Session | None:
     if _SessionLocal is None:
         return None
     return _SessionLocal()
+
+
+def db_session():
+    """FastAPI dependency — yields a DB session or None when disabled."""
+    db = get_db()
+    if db is None:
+        yield None
+        return
+    try:
+        yield db
+    finally:
+        db.close()

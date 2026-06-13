@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from schemas import EvaluationResult, Role
+from services.grading_mapper import grading_from_evaluation
 from services.orchestrator import EvaluationOrchestrator
 from workflows.interview_agents import run_first_question, run_turn, session_store
 from workflows.interview_agents.question_bank import pick_random_preview
@@ -62,6 +63,8 @@ class InterviewSessionService:
         filename: str,
         orchestrator: EvaluationOrchestrator,
         gpu_consent: str | None = None,
+        user_id=None,
+        client_metrics_raw: str | None = None,
     ) -> dict:
         state = session_store.get(session_id)
         if not state:
@@ -80,13 +83,21 @@ class InterviewSessionService:
             question=question,
             question_id=question_id,
             gpu_consent=gpu_consent,
+            user_id=user_id,
+            competency=state.get("current_competency"),
+            client_metrics_raw=client_metrics_raw,
         )
 
         state["current_answer"] = evaluation.transcript.strip()
         if not state["current_answer"]:
             raise ValueError("Could not transcribe speech from the recording.")
 
+        state["precomputed_grading"] = grading_from_evaluation(
+            evaluation, state.get("current_competency", "general")
+        )
+
         result: TurnResult = await run_turn(state)
+        state.pop("precomputed_grading", None)
         self._apply_turn_result(state, result)
         session_store.save(state)
 

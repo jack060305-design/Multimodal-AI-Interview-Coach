@@ -39,6 +39,9 @@ class Settings:
     s3_bucket: str = os.getenv("S3_BUCKET", "interview-coach-videos")
     s3_endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "")
     local_storage_dir: str = os.getenv("LOCAL_STORAGE_DIR", "./data/uploads")
+    # Student tier: skip S3/video bytes to save cost (scores still saved in Postgres)
+    skip_video_storage: bool = os.getenv("SKIP_VIDEO_STORAGE", "false").lower() == "true"
+    data_dir: str = os.getenv("DATA_DIR", "./data")
 
     # Processing (device resolved at runtime via utils.device — see ACCELERATOR_MODE)
     work_dir: str = os.getenv("WORK_DIR", "./data/work")
@@ -51,6 +54,19 @@ class Settings:
     langsmith_project: str = os.getenv("LANGSMITH_PROJECT", "interview-coach")
 
     cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+    # Auth (JWT + Facebook)
+    jwt_secret: str = os.getenv("JWT_SECRET", os.getenv("AUTH_SECRET", "change-me-in-production"))
+    jwt_expire_hours: int = int(os.getenv("JWT_EXPIRE_HOURS", "168"))
+    facebook_app_id: str = os.getenv("FACEBOOK_APP_ID", "")
+    facebook_app_secret: str = os.getenv("FACEBOOK_APP_SECRET", "")
+
+    # Embeddings: huggingface (local) | openai (cloud)
+    embedding_backend: str = os.getenv("EMBEDDING_BACKEND", "").lower()
+    openai_embedding_model: str = os.getenv(
+        "OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"
+    )
 
     # Daily LLM question generation (Scheduled Job + LLM)
     daily_questions_enabled: bool = (
@@ -73,8 +89,26 @@ class Settings:
         return "openai" if self.is_cloud else "local"
 
     @property
+    def facebook_redirect_uri(self) -> str:
+        base = os.getenv("FACEBOOK_REDIRECT_URI", "").strip()
+        if base:
+            return base
+        api = os.getenv("PUBLIC_API_URL", "").strip().rstrip("/")
+        if api:
+            return f"{api}/auth/facebook/callback"
+        return "http://localhost:8000/auth/facebook/callback"
+
+    @property
+    def resolved_embedding_backend(self) -> str:
+        if self.embedding_backend:
+            return self.embedding_backend
+        return "openai" if self.is_cloud else "huggingface"
+
+    @property
     def resolved_vector_store(self) -> str:
         if self.is_cloud and self.vector_store == "chroma":
+            if self.resolved_embedding_backend == "openai":
+                return "chroma"
             return "memory"
         return self.vector_store
 

@@ -16,9 +16,11 @@ class EvaluationRepository:
         video_key: str | None,
         llm_provider: str,
         vector_store: str,
+        user_id: UUID | None = None,
     ) -> EvaluationRecord:
         record = EvaluationRecord(
             id=result.evaluation_id,
+            user_id=user_id,
             role=result.role.value,
             question_id=result.question_id,
             question=result.question,
@@ -37,13 +39,11 @@ class EvaluationRepository:
         self.db.refresh(record)
         return record
 
-    def list_recent(self, limit: int = 20) -> list[EvaluationRecord]:
-        return (
-            self.db.query(EvaluationRecord)
-            .order_by(EvaluationRecord.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+    def list_recent(self, limit: int = 20, user_id: UUID | None = None) -> list[EvaluationRecord]:
+        q = self.db.query(EvaluationRecord)
+        if user_id is not None:
+            q = q.filter(EvaluationRecord.user_id == user_id)
+        return q.order_by(EvaluationRecord.created_at.desc()).limit(limit).all()
 
     def get(self, evaluation_id: UUID) -> EvaluationRecord | None:
         return (

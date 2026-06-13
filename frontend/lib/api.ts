@@ -1,5 +1,7 @@
 const LOCAL_API = "http://localhost:8000";
 
+import { authHeaders, type AuthResponse } from "./auth";
+
 /** Resolved at build time; empty string means "not configured" (not same-origin). */
 export function getApiBaseUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_API_URL?.trim();
@@ -94,7 +96,13 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
     throw new ApiError("API backend is not configured.");
   }
 
-  const res = await fetch(`${base}${path}`, init);
+  const res = await fetch(`${base}${path}`, {
+    ...init,
+    headers: {
+      ...authHeaders(),
+      ...(init?.headers as Record<string, string> | undefined),
+    },
+  });
   const data = await readResponseBody(res);
 
   if (!res.ok) {
@@ -129,7 +137,11 @@ export async function postEvaluate(
   form: FormData
 ): Promise<Record<string, unknown>> {
   const base = getApiBaseUrl();
-  const res = await fetch(`${base}/evaluate`, { method: "POST", body: form });
+  const res = await fetch(`${base}/evaluate`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
   const data = (await readResponseBody(res)) as Record<string, unknown>;
 
   if (res.status === 428) {
@@ -209,6 +221,7 @@ export async function postInterviewVideoTurn(
   const base = getApiBaseUrl();
   const res = await fetch(`${base}/interview/sessions/${sessionId}/turn/video`, {
     method: "POST",
+    headers: authHeaders(),
     body: form,
   });
   const data = (await readResponseBody(res)) as Record<string, unknown>;
@@ -227,9 +240,40 @@ export async function postInterviewVideoTurn(
             "message" in detail &&
             typeof (detail as { message: unknown }).message === "string"
           ? (detail as { message: string }).message
-          : "Video turn failed";
-    throw new ApiError(friendlyApiErrorMessage(message, res.status), res.status);
-  }
-
   return data;
+}
+
+export async function authRegister(body: {
+  email: string;
+  password: string;
+  name: string;
+}): Promise<AuthResponse> {
+  return fetchJson<AuthResponse>("/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function authLogin(body: {
+  email: string;
+  password: string;
+}): Promise<AuthResponse> {
+  return fetchJson<AuthResponse>("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function fetchMyEvaluations(): Promise<
+  Array<{
+    evaluation_id: string;
+    role: string;
+    question: string;
+    overall_score: number;
+    created_at: string;
+  }>
+> {
+  return fetchJson("/me/evaluations");
 }

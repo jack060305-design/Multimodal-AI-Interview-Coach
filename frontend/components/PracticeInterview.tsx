@@ -23,6 +23,8 @@ import {
   setStoredGpuConsent,
 } from "@/lib/gpuConsent";
 import { BankQuestion, pickRandomQuestion } from "@/lib/questions";
+import type { ClientDeliveryMetrics } from "@/lib/faceHud";
+import { getStoredToken } from "@/lib/auth";
 
 type Role = { id: string; label: string };
 type AgentTrace = { node: string; decision: string };
@@ -53,6 +55,7 @@ export default function PracticeInterview() {
   const [sessionComplete, setSessionComplete] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState<InterviewQuestion | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [clientMetrics, setClientMetrics] = useState<Record<string, unknown> | null>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [agentTrace, setAgentTrace] = useState<AgentTrace[]>([]);
@@ -82,6 +85,7 @@ export default function PracticeInterview() {
     setSessionComplete(false);
     setCurrentQuestion(null);
     setVideoBlob(null);
+    setClientMetrics(null);
     setTranscript(null);
     setResult(null);
     setAgentTrace([]);
@@ -180,8 +184,9 @@ export default function PracticeInterview() {
     }
   }, []);
 
-  const onRecorded = useCallback((blob: Blob) => {
+  const onRecorded = useCallback((blob: Blob, metrics?: ClientDeliveryMetrics) => {
     setVideoBlob(blob);
+    setClientMetrics(metrics ?? null);
     setTranscript(null);
     setResult(null);
     setTurnGrading(null);
@@ -301,6 +306,9 @@ export default function PracticeInterview() {
     const form = new FormData();
     form.append("video", videoBlob, "recording.webm");
     form.append("gpu_consent", consent);
+    if (clientMetrics) {
+      form.append("client_metrics", JSON.stringify(clientMetrics));
+    }
 
     try {
       if (consent === "always" || consent === "never") {
@@ -330,6 +338,7 @@ export default function PracticeInterview() {
           agent_trace: (data.agent_trace as AgentTrace[]) || [],
         });
         setVideoBlob(null);
+    setClientMetrics(null);
         setTranscript(null);
       }
       setPendingConsent(null);
@@ -402,6 +411,14 @@ export default function PracticeInterview() {
         {!hasApiBackend() && (
           <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             Demo mode — connect a backend API for full Whisper + LangGraph scoring.
+          </p>
+        )}
+        {hasApiBackend() && !getStoredToken() && (
+          <p className="mt-2 rounded-lg border border-coach-mist bg-coach-sky/20 px-3 py-2 text-xs text-slate-700">
+            <a href="/login" className="font-medium text-coach-blue hover:underline">
+              Sign in
+            </a>{" "}
+            to save evaluations to Postgres (free Neon tier). Guest practice still works.
           </p>
         )}
         {hasApiBackend() && apiHealth?.status === "ok" && (

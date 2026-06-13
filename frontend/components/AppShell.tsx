@@ -1,23 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { clearAuthSession, getStoredUser, type AuthUser } from "@/lib/auth";
 
 const TOOLS = [
-  {
-    href: "/",
-    label: "About",
-    description: "What this coach does",
-  },
-  {
-    href: "/practice",
-    label: "Practice Interview",
-    description: "Grounded rubric scoring",
-  },
+  { href: "/", label: "About", description: "What this coach does" },
+  { href: "/practice", label: "Practice Interview", description: "Grounded rubric scoring" },
+  { href: "/history", label: "My history", description: "Saved evaluations" },
 ] as const;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    setUser(getStoredUser());
+  }, [pathname]);
+
+  const logout = () => {
+    clearAuthSession();
+    setUser(null);
+    router.push("/login");
+  };
 
   return (
     <div className="flex min-h-screen">
@@ -51,6 +58,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+
+        <div className="border-t border-coach-mist/70 p-3">
+          {user ? (
+            <div className="space-y-2">
+              <p className="truncate px-2 text-xs text-slate-600">{user.name}</p>
+              <button
+                type="button"
+                onClick={logout}
+                className="w-full rounded-lg border border-coach-mist px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <Link
+                href="/login"
+                className="rounded-lg bg-coach-blue px-3 py-2 text-center text-sm font-medium text-white"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/signup"
+                className="rounded-lg border border-coach-mist px-3 py-2 text-center text-sm text-slate-700"
+              >
+                Sign up
+              </Link>
+            </div>
+          )}
+        </div>
       </aside>
 
       <div className="min-w-0 flex-1 bg-coach-page">{children}</div>

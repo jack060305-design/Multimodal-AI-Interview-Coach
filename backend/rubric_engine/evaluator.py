@@ -28,6 +28,17 @@ Ideal Answer:
 Evaluation Guidelines:
 {guidelines}
 
+Interview Question:
+{question}
+
+Competency focus: {competency}
+
+Delivery signals (measured during answer):
+- Words per minute: {wpm}
+- Filler word rate: {filler_rate}%
+- Long pauses (>{pause_gap}s): {long_pauses}
+- Eye contact (camera): {eye_contact_pct}%
+
 Candidate Transcript:
 {transcript}
 
@@ -119,17 +130,29 @@ class RubricEvaluator:
         role: Role,
         transcript: TranscriptResult,
         rubric_payload: dict[str, Any],
+        *,
+        question: str | None = None,
+        competency: str | None = None,
+        delivery: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         from rubric_engine.local_evaluator import _has_valid_llm_key, evaluate_local
 
         if not _has_valid_llm_key():
             return evaluate_local(role, transcript, rubric_payload)
 
+        delivery = delivery or {}
         system = EVALUATOR_SYSTEM.format(role=role.value.replace("_", " ").title())
         user = EVALUATOR_USER.format(
             rubric_json=json.dumps(rubric_payload["rubric"], indent=2, ensure_ascii=False),
             ideal_answer=rubric_payload["ideal_answer"],
             guidelines=rubric_payload.get("evaluation_guidelines", ""),
+            question=question or rubric_payload.get("question", ""),
+            competency=competency or "general",
+            wpm=delivery.get("wpm", "n/a"),
+            filler_rate=delivery.get("filler_rate", "n/a"),
+            long_pauses=delivery.get("long_pauses", "n/a"),
+            eye_contact_pct=delivery.get("eye_contact_pct", "n/a"),
+            pause_gap=1.5,
             transcript=transcript.text,
         )
 

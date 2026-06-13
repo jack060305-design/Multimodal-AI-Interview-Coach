@@ -85,7 +85,8 @@ jobs:
           ENV_VARS=(
             "DEPLOY_PROFILE=cloud"
             "WHISPER_BACKEND=openai"
-            "VECTOR_STORE=memory"
+            "VECTOR_STORE=chroma"
+            "EMBEDDING_BACKEND=openai"
             "LLM_PROVIDER=$PROVIDER"
             "LLM_MODEL=$MODEL"
             "DB_ENABLED=false"
@@ -95,8 +96,27 @@ jobs:
             "DAILY_QUESTIONS_MAX_REVISIONS=1"
             "CORS_ORIGINS=http://localhost:3000,https://multimodal-ai-interview-coach.vercel.app"
             "WORK_DIR=/tmp/interview-work"
-            "LOCAL_STORAGE_DIR=/tmp/interview-uploads"
+            "STORAGE_BACKEND=local"
+            "DATA_DIR=/app/backend/data"
+            "CHROMA_PERSIST_DIR=/app/backend/data/chroma"
+            "LOCAL_STORAGE_DIR=/app/backend/data/uploads"
+            "FRONTEND_URL=https://multimodal-ai-interview-coach.vercel.app"
           )
+          if [ -n "${{ secrets.DATABASE_URL }}" ]; then
+            ENV_VARS+=("DB_ENABLED=true")
+            ENV_VARS+=("DATABASE_URL=${{ secrets.DATABASE_URL }}")
+          fi
+          if [ -n "${{ secrets.JWT_SECRET }}" ]; then
+            ENV_VARS+=("JWT_SECRET=${{ secrets.JWT_SECRET }}")
+          fi
+          if [ -n "${{ secrets.FACEBOOK_APP_ID }}" ]; then
+            ENV_VARS+=("FACEBOOK_APP_ID=${{ secrets.FACEBOOK_APP_ID }}")
+            ENV_VARS+=("FACEBOOK_APP_SECRET=${{ secrets.FACEBOOK_APP_SECRET }}")
+          fi
+          FQDN_PREVIEW=$(az containerapp show -g "$RG" -n "${{ env.APP_NAME }}" --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || true)
+          if [ -n "$FQDN_PREVIEW" ]; then
+            ENV_VARS+=("PUBLIC_API_URL=https://$FQDN_PREVIEW")
+          fi
           if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
             ENV_VARS+=("OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}")
           fi

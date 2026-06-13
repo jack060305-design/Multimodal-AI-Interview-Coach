@@ -12,6 +12,7 @@ class InterviewState(TypedDict, total=False):
     current_question_id: str
     current_competency: str
     current_answer: str
+    precomputed_grading: dict[str, Any]
 
     grading: dict[str, Any]
     competency_scores: dict[str, float]

@@ -3,14 +3,17 @@ from typing import Any, TypedDict
 from langgraph.graph import END, StateGraph
 
 from config import get_settings
+from processors.client_metrics import parse_client_metrics
 from processors.cloud_analyzer import analyze_transcript_only
 from processors.cloud_media import CloudMediaProcessor
 from processors.transcriber_factory import create_transcriber
 from rubric_engine.evaluator import RubricEvaluator
+from rubric_engine.refresh import reload_rubrics_if_stale
 from rubric_engine.store_factory import get_vector_store
 from rubrics.registry import rubric_doc_to_payload
 from rubrics.sample_rubrics import RUBRIC_BY_ID
 from schemas import (
+    ClientDeliveryMetrics,
     EvaluationMetrics,
     EvaluationResult,
     PerformanceCategory,
@@ -24,6 +27,9 @@ class GraphState(TypedDict, total=False):
     role: Role
     question: str
     question_id: str | None
+    competency: str | None
+    client_metrics_raw: str | None
+    client_metrics: ClientDeliveryMetrics | None
     artifacts: Any
     transcript: Any
     eye_contact: Any
@@ -81,6 +87,8 @@ class EvaluationGraph:
         role: Role,
         question: str,
         question_id: str | None = None,
+        competency: str | None = None,
+        client_metrics_raw: str | None = None,
     ) -> EvaluationResult:
         final = self.graph.invoke(
             {
@@ -88,6 +96,9 @@ class EvaluationGraph:
                 "role": role,
                 "question": question,
                 "question_id": question_id,
+                "competency": competency,
+                "client_metrics_raw": client_metrics_raw,
+                "client_metrics": parse_client_metrics(client_metrics_raw),
             }
         )
         return final["result"]
@@ -107,6 +118,12 @@ class EvaluationGraph:
         return state
 
     def _analyze_vision(self, state: GraphState) -> GraphState:
+        client = state.get("client_metrics")
+        if client and client.eye_contact_percentage is not None:
+            from processors.client_metrics import eye_from_client
+
+            state["eye_contact"] = eye_from_client(client)
+            return state
         if self._cloud:
             state["eye_contact"] = None
             return state
@@ -116,9 +133,13 @@ class EvaluationGraph:
         return state
 
     def _analyze_audio(self, state: GraphState) -> GraphState:
+        client = state.get("client_metrics")
         if self._cloud:
-            filler, confidence, eye = analyze_transcript_only(state["transcript"])
-            state["eye_contact"] = eye
+            filler, confidence, eye = analyze_transcript_only(
+                state["transcript"], client=client
+            )
+            if state.get("eye_contact") is None:
+                state["eye_contact"] = eye
             state["filler"] = filler
             state["confidence"] = confidence
             return state
@@ -132,6 +153,7 @@ class EvaluationGraph:
         return state
 
     def _retrieve_rubric(self, state: GraphState) -> GraphState:
+        reload_rubrics_if_stale()
         role = state["role"]
         question = state["question"]
         question_id = state.get("question_id")
@@ -154,10 +176,20 @@ class EvaluationGraph:
         return state
 
     def _llm_evaluate(self, state: GraphState) -> GraphState:
+        eye = state["eye_contact"]
+        filler = state["filler"]
         state["llm_result"] = self.evaluator.evaluate(
             state["role"],
             state["transcript"],
             state["rubric_payload"],
+            question=state.get("question") or state["rubric_payload"].get("question"),
+            competency=state.get("competency"),
+            delivery={
+                "wpm": filler.wpm,
+                "filler_rate": filler.rate,
+                "long_pauses": filler.long_pauses,
+                "eye_contact_pct": eye.percentage if eye else "n/a",
+            },
         )
         return state
 
@@ -183,6 +215,10 @@ class EvaluationGraph:
             suggestions.append(
                 f"Reduce filler words — top: {', '.join(filler.top_fillers) or 'none'} "
                 f"({filler.rate}%)."
+            )
+        if filler.long_pauses > 2:
+            suggestions.append(
+                f"Reduce long pauses ({filler.long_pauses} gaps >1.5s) — keep momentum."
             )
         if eye.percentage < 60:
             suggestions.append(

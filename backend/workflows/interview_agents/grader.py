@@ -90,6 +90,14 @@ def _llm_grade(state: InterviewState, rubric_payload: dict[str, Any], competency
 
 async def grader_node(state: InterviewState) -> dict[str, Any]:
     competency = state.get("current_competency", "general")
+
+    if pre := state.get("precomputed_grading"):
+        score = int(pre.get("score", 3))
+        updated = _update_competency_scores(
+            state.get("competency_scores", {}), pre.get("competency", competency), score
+        )
+        return {"grading": pre, "competency_scores": updated}
+
     store = get_vector_store()
     role = Role(state["role"])
 

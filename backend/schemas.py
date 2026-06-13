@@ -53,6 +53,17 @@ class EyeContactMetric(BaseModel):
     comment: str
     head_movement_score: int | None = None
     posture_score: int | None = None
+    source: str = "server"
+
+
+class ClientDeliveryMetrics(BaseModel):
+    """Real-time metrics from browser Face Landmarker (no server CV cost)."""
+
+    eye_contact_percentage: float | None = None
+    eye_contact_score: int | None = None
+    frames_analyzed: int = 0
+    face_present_rate: float | None = None
+    source: str = "browser"
 
 
 class FillerWordsMetric(BaseModel):

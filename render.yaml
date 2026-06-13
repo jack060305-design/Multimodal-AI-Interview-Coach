@@ -1,13 +1,10 @@
-# Render Blueprint — backend API for Vercel frontend (full AI via cloud profile)
-# Dashboard: New > Blueprint > connect this repo
-# Then set OPENAI_API_KEY in Render env and NEXT_PUBLIC_API_URL on Vercel.
-
+# Render.com — student budget: Neon Postgres (free) + local disk storage
 services:
   - type: web
     name: interview-coach-api
     runtime: docker
     dockerfilePath: ./Dockerfile.cloud
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: DEPLOY_PROFILE
@@ -15,16 +12,40 @@ services:
       - key: WHISPER_BACKEND
         value: openai
       - key: VECTOR_STORE
-        value: memory
-      - key: LLM_PROVIDER
+        value: chroma
+      - key: EMBEDDING_BACKEND
         value: openai
-      - key: LLM_MODEL
-        value: gpt-4o-mini
       - key: DB_ENABLED
-        value: "false"
-      - key: CORS_ORIGINS
-        value: https://interview-coach-nine-sigma.vercel.app,http://localhost:3000
+        value: "true"
+      - key: STORAGE_BACKEND
+        value: local
+      - key: SKIP_VIDEO_STORAGE
+        value: "true"
+      - key: CHROMA_PERSIST_DIR
+        value: /tmp/chroma
+      - key: LOCAL_STORAGE_DIR
+        value: /tmp/uploads
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: interview-coach-db
+          property: connectionString
       - key: OPENAI_API_KEY
         sync: false
-      - key: OPENAI_WHISPER_MODEL
-        value: whisper-1
+      - key: FRONTEND_URL
+        sync: false
+      - key: PUBLIC_API_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+
+databases:
+  - name: interview-coach-db
+    plan: free
+    databaseName: interview_coach
+    user: interview

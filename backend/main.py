@@ -8,11 +8,14 @@ from uuid import UUID
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from auth import auth_router
+from auth.deps import get_current_user, get_current_user_id_optional
 from config import get_settings
 from db.database import get_db, init_db
+from db.models import User
 from db.repository import EvaluationRepository
 from schemas import (
     EvaluationHistoryItem,
@@ -31,6 +34,8 @@ from services.interview_session_service import InterviewSessionService
 from services.orchestrator import EvaluationOrchestrator
 from services.question_feed_sync import maybe_sync_on_startup, sync_question_feed
 from services.daily_question_scheduler import start_daily_scheduler, stop_daily_scheduler
+from rubric_engine.bootstrap import bootstrap_vector_index
+from storage.s3_bootstrap import ensure_s3_bucket
 from tracing.langsmith_setup import configure_langsmith
 from utils.device import accelerator_status_dict, hardware_status_dict, log_accelerator_profile
 from utils.gpu_consent import clear_stored_consent, consent_status, resolve_consent, save_stored_consent
@@ -49,6 +54,8 @@ async def lifespan(app: FastAPI):
     global orchestrator, interview_service
     log_accelerator_profile()
     init_db()
+    ensure_s3_bucket()
+    bootstrap_vector_index()
     maybe_sync_on_startup()
     start_daily_scheduler()
     orchestrator = EvaluationOrchestrator()
@@ -76,6 +83,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+
 
 @app.get("/health")
 async def health():
@@ -87,6 +96,8 @@ async def health():
         "vector_store": settings.resolved_vector_store,
         "storage_backend": settings.storage_backend,
         "db_enabled": settings.db_enabled,
+        "embedding_backend": settings.resolved_embedding_backend,
+        "auth_enabled": settings.db_enabled,
         "langsmith": settings.langsmith_enabled,
         "accelerator": accelerator_status_dict(),
         "gpu": hardware_status_dict(),
@@ -200,6 +211,35 @@ async def list_questions(role: Role):
     }
 
 
+@app.get("/me/evaluations", response_model=list[EvaluationHistoryItem])
+async def my_evaluations(
+    limit: int = 20,
+    user: User = Depends(get_current_user),
+):
+    db = get_db()
+    if db is None:
+        raise HTTPException(503, "Database not available")
+    try:
+        records = EvaluationRepository(db).list_recent(limit=limit, user_id=user.id)
+        return [
+            EvaluationHistoryItem(
+                evaluation_id=r.id,
+                role=Role(r.role),
+                question_id=r.question_id,
+                question=r.question,
+                overall_score=r.overall_score,
+                delivery_score=r.delivery_score,
+                communication_score=r.communication_score,
+                technical_score=r.technical_score,
+                created_at=r.created_at.isoformat(),
+                video_storage_key=r.video_storage_key,
+            )
+            for r in records
+        ]
+    finally:
+        db.close()
+
+
 @app.get("/evaluations", response_model=list[EvaluationHistoryItem])
 async def list_evaluations(limit: int = 20):
     db = get_db()
@@ -247,6 +287,8 @@ async def evaluate(
     question_id: str | None = Form(None),
     gpu_consent: str | None = Form(None),
     video: UploadFile = File(...),
+    client_metrics: str | None = Form(None),
+    user_id=Depends(get_current_user_id_optional),
 ):
     if orchestrator is None:
         raise HTTPException(503, "Service not ready")
@@ -278,6 +320,8 @@ async def evaluate(
             question=question,
             question_id=question_id,
             gpu_consent=consent,
+            user_id=user_id,
+            client_metrics_raw=client_metrics,
         )
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
@@ -355,6 +399,8 @@ async def interview_video_turn(
     session_id: str,
     gpu_consent: str | None = Form(None),
     video: UploadFile = File(...),
+    client_metrics: str | None = Form(None),
+    user_id=Depends(get_current_user_id_optional),
 ):
     if interview_service is None or orchestrator is None:
         raise HTTPException(503, "Service not ready")
@@ -385,6 +431,8 @@ async def interview_video_turn(
             filename=video.filename,
             orchestrator=orchestrator,
             gpu_consent=consent,
+            user_id=user_id,
+            client_metrics_raw=client_metrics,
         )
         return InterviewVideoTurnResponse(**data)
     except ValueError as e:

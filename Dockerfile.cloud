@@ -14,13 +14,19 @@ COPY rubrics/ ./rubrics/
 
 WORKDIR /app/backend
 
+# Student-budget defaults: Azure Files mount at /app/backend/data (no paid S3 required)
 ENV DEPLOY_PROFILE=cloud
 ENV WHISPER_BACKEND=openai
-ENV VECTOR_STORE=memory
+ENV VECTOR_STORE=chroma
+ENV EMBEDDING_BACKEND=openai
 ENV LLM_PROVIDER=openai
 ENV DB_ENABLED=false
+ENV STORAGE_BACKEND=local
+ENV DATA_DIR=/app/backend/data
+ENV CHROMA_PERSIST_DIR=/app/backend/data/chroma
+ENV LOCAL_STORAGE_DIR=/app/backend/data/uploads
 ENV WORK_DIR=/tmp/interview-work
-ENV LOCAL_STORAGE_DIR=/tmp/interview-uploads
+ENV SKIP_VIDEO_STORAGE=false
 
 EXPOSE 8000
 
