@@ -1,7 +1,5 @@
 import os
 
-from rubric_engine.vector_store import RubricVectorStore
-
 
 def get_vector_store():
     from config import get_settings
@@ -15,4 +13,6 @@ def get_vector_store():
         from rubric_engine.memory_store import MemoryRubricStore
 
         return MemoryRubricStore()
+    from rubric_engine.vector_store import RubricVectorStore
+
     return RubricVectorStore()
