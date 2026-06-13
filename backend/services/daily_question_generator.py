@@ -266,7 +266,7 @@ def _generate_simple(*, today: str, per_role: int) -> dict:
 def generate_daily_questions(*, force: bool = False) -> dict:
     """Generate fresh questions for all roles (agentic LangGraph or simple LLM)."""
     settings = get_settings()
-    if not settings.daily_questions_enabled:
+    if not settings.daily_questions_enabled and not force:
         return {"ok": False, "skipped": True, "reason": "DAILY_QUESTIONS_ENABLED=false"}
 
     if not _has_valid_llm_key():

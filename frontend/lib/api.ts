@@ -16,6 +16,38 @@ export function hasApiBackend(): boolean {
   return getApiBaseUrl().length > 0;
 }
 
+/** User-facing hint when OpenAI/Gemini quota or billing blocks AI features. */
+export function friendlyApiErrorMessage(raw: string, status?: number): string {
+  const lower = raw.toLowerCase();
+  if (
+    status === 429 ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("exceeded your current quota") ||
+    lower.includes("resource_exhausted")
+  ) {
+    return (
+      "AI API quota exceeded. Add billing/credits on OpenAI (or Gemini), then redeploy. " +
+      "Practice flow and question bank still work; video grading and daily agents need credits."
+    );
+  }
+  if (lower.includes("openai_api_key") || lower.includes("api key")) {
+    return "API key missing or invalid on the server. Check GitHub/Azure secrets and redeploy.";
+  }
+  return raw;
+}
+
+export type HealthStatus = {
+  status: string;
+  deploy_profile?: string;
+  whisper_backend?: string;
+  llm_provider?: string;
+  langsmith?: boolean;
+};
+
+export async function fetchHealth(): Promise<HealthStatus> {
+  return fetchJson<HealthStatus>("/health");
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -79,7 +111,7 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
             typeof (detail as { message: unknown }).message === "string"
           ? (detail as { message: string }).message
           : `Request failed (${res.status})`;
-    throw new ApiError(message, res.status);
+    throw new ApiError(friendlyApiErrorMessage(message, res.status), res.status);
   }
 
   return data as T;
@@ -115,7 +147,7 @@ export async function postEvaluate(
             typeof (detail as { message: unknown }).message === "string"
           ? (detail as { message: string }).message
           : "Evaluation failed";
-    throw new ApiError(message, res.status);
+    throw new ApiError(friendlyApiErrorMessage(message, res.status), res.status);
   }
 
   return data;
@@ -196,7 +228,7 @@ export async function postInterviewVideoTurn(
             typeof (detail as { message: unknown }).message === "string"
           ? (detail as { message: string }).message
           : "Video turn failed";
-    throw new ApiError(message, res.status);
+    throw new ApiError(friendlyApiErrorMessage(message, res.status), res.status);
   }
 
   return data;

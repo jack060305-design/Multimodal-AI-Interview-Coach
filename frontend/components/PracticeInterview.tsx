@@ -10,7 +10,10 @@ import {
   fetchRandomQuestion,
   fetchQuestionFeedStatus,
   fetchDailyQuestionStatus,
+  fetchHealth,
+  getApiBaseUrl,
   hasApiBackend,
+  HealthStatus,
   loadDemoEvaluation,
   postInterviewVideoTurn,
 } from "@/lib/api";
@@ -69,6 +72,7 @@ export default function PracticeInterview() {
     llm_calls_last_run?: number | null;
     agent_trace?: Array<{ node: string; decision: string }> | null;
   } | null>(null);
+  const [apiHealth, setApiHealth] = useState<HealthStatus | null>(null);
   const [consentModalOpen, setConsentModalOpen] = useState(false);
   const [pendingConsent, setPendingConsent] = useState<GpuConsent | null>(null);
 
@@ -146,6 +150,9 @@ export default function PracticeInterview() {
     void loadCatalog();
 
     if (hasApiBackend()) {
+      fetchHealth()
+        .then((h) => setApiHealth(h))
+        .catch(() => setApiHealth(null));
       fetchJson<GpuStatus>("/gpu/status")
         .then((d) => setGpuStatus(d))
         .catch(() => null);
@@ -395,6 +402,13 @@ export default function PracticeInterview() {
         {!hasApiBackend() && (
           <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             Demo mode — connect a backend API for full Whisper + LangGraph scoring.
+          </p>
+        )}
+        {hasApiBackend() && apiHealth?.status === "ok" && (
+          <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+            API connected ({getApiBaseUrl().replace(/^https?:\/\//, "")}) · {apiHealth.deploy_profile}{" "}
+            · LLM {apiHealth.llm_provider} · Whisper {apiHealth.whisper_backend}
+            {apiHealth.langsmith ? " · LangSmith on" : ""}
           </p>
         )}
       </header>
