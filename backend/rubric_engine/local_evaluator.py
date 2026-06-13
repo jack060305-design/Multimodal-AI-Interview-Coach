@@ -19,7 +19,11 @@ def _has_valid_llm_key() -> bool:
     val = (os.getenv(key_name) or "").strip()
     if not val or val in ("sk-...", "sk-your_openai_key"):
         return False
-    if val.startswith("sk-") and len(val) < 20:
+    if provider == "openai" and val.startswith("sk-") and len(val) < 20:
+        return False
+    if provider == "anthropic" and val.startswith("sk-ant-") and len(val) < 24:
+        return False
+    if provider == "gemini" and len(val) < 20:
         return False
     return True
 

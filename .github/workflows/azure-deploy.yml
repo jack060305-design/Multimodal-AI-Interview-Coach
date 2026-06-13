@@ -5,8 +5,14 @@
 #   AZURE_RG           — rg-interview-coach-jack0
 #   AZURE_LOCATION     — westus2
 #   CONTAINERAPPS_ENV  — ic-jack0-env
-# Optional:
-#   OPENAI_API_KEY     — for Whisper + agentic daily questions
+# Optional API keys (workflow auto-picks LLM provider from what you set):
+#   ANTHROPIC_API_KEY  — LLM scoring + daily agents (recommended)
+#   GOOGLE_API_KEY     — LLM via Gemini
+#   OPENAI_API_KEY     — LLM and/or Whisper transcription on cloud
+#   LANGSMITH_API_KEY  — LangGraph / LLM tracing
+# Optional repo variables (Settings → Secrets and variables → Actions → Variables):
+#   LLM_PROVIDER       — anthropic | gemini | openai (auto if unset)
+#   LLM_MODEL          — override default model for provider
 
 name: Deploy to Azure Container Apps
 
@@ -55,12 +61,33 @@ jobs:
           IMAGE="${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
 
+          PROVIDER="${{ vars.LLM_PROVIDER }}"
+          MODEL="${{ vars.LLM_MODEL }}"
+          if [ -z "$PROVIDER" ]; then
+            if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+              PROVIDER="anthropic"
+              MODEL="${MODEL:-claude-3-5-haiku-20241022}"
+            elif [ -n "${{ secrets.GOOGLE_API_KEY }}" ]; then
+              PROVIDER="gemini"
+              MODEL="${MODEL:-gemini-2.0-flash}"
+            else
+              PROVIDER="openai"
+              MODEL="${MODEL:-gpt-4o-mini}"
+            fi
+          else
+            case "$PROVIDER" in
+              anthropic) MODEL="${MODEL:-claude-3-5-haiku-20241022}" ;;
+              gemini) MODEL="${MODEL:-gemini-2.0-flash}" ;;
+              *) MODEL="${MODEL:-gpt-4o-mini}" ;;
+            esac
+          fi
+
           ENV_VARS=(
             "DEPLOY_PROFILE=cloud"
             "WHISPER_BACKEND=openai"
             "VECTOR_STORE=memory"
-            "LLM_PROVIDER=openai"
-            "LLM_MODEL=gpt-4o-mini"
+            "LLM_PROVIDER=$PROVIDER"
+            "LLM_MODEL=$MODEL"
             "DB_ENABLED=false"
             "DAILY_QUESTIONS_MODE=agentic"
             "DAILY_QUESTIONS_ENABLED=false"
@@ -72,6 +99,17 @@ jobs:
           )
           if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
             ENV_VARS+=("OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}")
+          fi
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            ENV_VARS+=("ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}")
+          fi
+          if [ -n "${{ secrets.GOOGLE_API_KEY }}" ]; then
+            ENV_VARS+=("GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}")
+          fi
+          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then
+            ENV_VARS+=("LANGCHAIN_TRACING_V2=true")
+            ENV_VARS+=("LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}")
+            ENV_VARS+=("LANGSMITH_PROJECT=interview-coach-daily-agents")
           fi
 
           EXISTS=$(az containerapp show -g "$RG" -n "${{ env.APP_NAME }}" --query name -o tsv 2>/dev/null || true)
@@ -104,10 +142,31 @@ jobs:
           IMAGE="${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
 
+          PROVIDER="${{ vars.LLM_PROVIDER }}"
+          MODEL="${{ vars.LLM_MODEL }}"
+          if [ -z "$PROVIDER" ]; then
+            if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+              PROVIDER="anthropic"
+              MODEL="${MODEL:-claude-3-5-haiku-20241022}"
+            elif [ -n "${{ secrets.GOOGLE_API_KEY }}" ]; then
+              PROVIDER="gemini"
+              MODEL="${MODEL:-gemini-2.0-flash}"
+            else
+              PROVIDER="openai"
+              MODEL="${MODEL:-gpt-4o-mini}"
+            fi
+          else
+            case "$PROVIDER" in
+              anthropic) MODEL="${MODEL:-claude-3-5-haiku-20241022}" ;;
+              gemini) MODEL="${MODEL:-gemini-2.0-flash}" ;;
+              *) MODEL="${MODEL:-gpt-4o-mini}" ;;
+            esac
+          fi
+
           JOB_ENV=(
             "DEPLOY_PROFILE=cloud"
-            "LLM_PROVIDER=openai"
-            "LLM_MODEL=gpt-4o-mini"
+            "LLM_PROVIDER=$PROVIDER"
+            "LLM_MODEL=$MODEL"
             "DB_ENABLED=false"
             "DAILY_QUESTIONS_ENABLED=true"
             "DAILY_QUESTIONS_MODE=agentic"
@@ -116,6 +175,17 @@ jobs:
           )
           if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
             JOB_ENV+=("OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}")
+          fi
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            JOB_ENV+=("ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}")
+          fi
+          if [ -n "${{ secrets.GOOGLE_API_KEY }}" ]; then
+            JOB_ENV+=("GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}")
+          fi
+          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then
+            JOB_ENV+=("LANGCHAIN_TRACING_V2=true")
+            JOB_ENV+=("LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}")
+            JOB_ENV+=("LANGSMITH_PROJECT=interview-coach-daily-agents")
           fi
 
           EXISTS=$(az containerapp job show -g "$RG" -n "${{ env.JOB_NAME }}" --query name -o tsv 2>/dev/null || true)
