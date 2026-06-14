@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import AppShell from "@/components/AppShell";
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
   title: "Multimodal AI Interview Coach",
@@ -14,9 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <AppShell>{children}</AppShell>
-      </body>
+      <body className={`${inter.className} min-h-screen antialiased`}>{children}</body>
     </html>
   );
 }

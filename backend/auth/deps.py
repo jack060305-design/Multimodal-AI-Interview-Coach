@@ -5,10 +5,36 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from auth.jwt_tokens import decode_access_token
+from auth.repository import UserRepository
+from auth.supabase_jwt import decode_supabase_token
 from db.database import db_session
 from db.models import User
 
 _bearer = HTTPBearer(auto_error=False)
+
+
+def _user_from_supabase_claims(db: Session, claims: dict) -> User | None:
+    sub = claims.get("sub")
+    if not sub:
+        return None
+    try:
+        user_id = UUID(sub)
+    except ValueError:
+        return None
+    meta = claims.get("user_metadata") or {}
+    email = claims.get("email")
+    name = (
+        meta.get("full_name")
+        or meta.get("name")
+        or (email.split("@")[0] if email else "User")
+    )
+    avatar = meta.get("avatar_url") or meta.get("picture")
+    return UserRepository(db).upsert_supabase_user(
+        user_id=user_id,
+        email=email,
+        name=str(name),
+        avatar_url=avatar,
+    )
 
 
 def get_current_user_optional(
@@ -17,7 +43,13 @@ def get_current_user_optional(
 ) -> User | None:
     if db is None or creds is None or not creds.credentials:
         return None
-    user_id = decode_access_token(creds.credentials)
+    token = creds.credentials
+
+    claims = decode_supabase_token(token)
+    if claims:
+        return _user_from_supabase_claims(db, claims)
+
+    user_id = decode_access_token(token)
     if user_id is None:
         return None
     return db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()

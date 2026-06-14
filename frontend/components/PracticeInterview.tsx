@@ -24,7 +24,7 @@ import {
 } from "@/lib/gpuConsent";
 import { BankQuestion, pickRandomQuestion } from "@/lib/questions";
 import type { ClientDeliveryMetrics } from "@/lib/faceHud";
-import { getStoredToken } from "@/lib/auth";
+import { getAccessToken } from "@/lib/auth";
 
 type Role = { id: string; label: string };
 type AgentTrace = { node: string; decision: string };
@@ -78,6 +78,11 @@ export default function PracticeInterview() {
   const [apiHealth, setApiHealth] = useState<HealthStatus | null>(null);
   const [consentModalOpen, setConsentModalOpen] = useState(false);
   const [pendingConsent, setPendingConsent] = useState<GpuConsent | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
+
+  useEffect(() => {
+    void getAccessToken().then((t) => setSignedIn(Boolean(t)));
+  }, []);
 
   const clearTurnState = useCallback(() => {
     setSessionId(null);
@@ -413,12 +418,12 @@ export default function PracticeInterview() {
             Demo mode — connect a backend API for full Whisper + LangGraph scoring.
           </p>
         )}
-        {hasApiBackend() && !getStoredToken() && (
+        {hasApiBackend() && !signedIn && (
           <p className="mt-2 rounded-lg border border-coach-mist bg-coach-sky/20 px-3 py-2 text-xs text-slate-700">
             <a href="/login" className="font-medium text-coach-blue hover:underline">
               Sign in
             </a>{" "}
-            to save evaluations to Postgres (free Neon tier). Guest practice still works.
+            with Google, Facebook, or email — history saved in Supabase Postgres.
           </p>
         )}
         {hasApiBackend() && apiHealth?.status === "ok" && (

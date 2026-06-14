@@ -98,6 +98,7 @@ async def health():
         "db_enabled": settings.db_enabled,
         "embedding_backend": settings.resolved_embedding_backend,
         "auth_enabled": settings.db_enabled,
+        "supabase_auth": settings.supabase_enabled,
         "langsmith": settings.langsmith_enabled,
         "accelerator": accelerator_status_dict(),
         "gpu": hardware_status_dict(),

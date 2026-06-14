@@ -56,3 +56,34 @@ class UserRepository:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def upsert_supabase_user(
+        self,
+        *,
+        user_id: UUID,
+        email: str | None,
+        name: str,
+        avatar_url: str | None = None,
+    ) -> User:
+        """Sync Supabase auth.users row into local users (same UUID as sub)."""
+        user = self.get_by_id(user_id)
+        if user:
+            if email and not user.email:
+                user.email = email.lower()
+            if name:
+                user.name = name
+            if avatar_url:
+                user.avatar_url = avatar_url
+            self.db.commit()
+            self.db.refresh(user)
+            return user
+        user = User(
+            id=user_id,
+            email=email.lower() if email else None,
+            name=name.strip() or "User",
+            avatar_url=avatar_url,
+        )
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user

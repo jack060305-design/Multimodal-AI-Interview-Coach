@@ -2,6 +2,74 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fallback styles — work even if Tailwind chunks fail to load */
+:root {
+  --coach-blue: #5680e9;
+  --coach-violet: #8860d0;
+  --coach-mist: #c1c8e4;
+}
+
 body {
   @apply bg-coach-page bg-fixed text-slate-800 antialiased min-h-screen;
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background-color: #e8eef9;
+  background-image:
+    radial-gradient(ellipse 85% 55% at 5% 0%, rgba(132, 206, 235, 0.45) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 100% 5%, rgba(136, 96, 208, 0.2) 0%, transparent 50%),
+    radial-gradient(ellipse 65% 45% at 50% 100%, rgba(90, 185, 234, 0.28) 0%, transparent 55%),
+    linear-gradient(160deg, #e4eaf8 0%, #f8f9fd 38%, #eef1f9 68%, #e2f3fb 100%);
+  background-attachment: fixed;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  padding: 2.5rem 1rem;
+  background-color: #e8eef9;
+  background-image:
+    radial-gradient(ellipse 85% 55% at 5% 0%, rgba(132, 206, 235, 0.45) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 100% 5%, rgba(136, 96, 208, 0.2) 0%, transparent 50%),
+    linear-gradient(160deg, #e4eaf8 0%, #f8f9fd 50%, #e2f3fb 100%);
+  background-attachment: fixed;
+}
+
+.auth-card {
+  max-width: 28rem;
+  margin: 0 auto;
+  border-radius: 1rem;
+  border: 1px solid rgba(193, 200, 228, 0.8);
+  background: rgba(255, 255, 255, 0.95);
+  padding: 1.5rem;
+  box-shadow: 0 20px 40px rgba(86, 128, 233, 0.08);
+}
+
+.auth-title-violet {
+  color: var(--coach-violet);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-btn-primary {
+  width: 100%;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--coach-blue);
+  color: #fff;
+  font-weight: 600;
+  padding: 0.625rem 1rem;
+  cursor: pointer;
+}
+
+.auth-oauth-btn {
+  display: flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid var(--coach-mist);
+  background: #fff;
+  cursor: pointer;
 }

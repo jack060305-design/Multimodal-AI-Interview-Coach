@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { clearAuthSession, getStoredUser, type AuthUser } from "@/lib/auth";
+import { getCurrentUser, signOutAuth, type AuthUser } from "@/lib/auth";
+import { getSupabase } from "@/lib/supabase/client";
 
 const TOOLS = [
-  { href: "/", label: "About", description: "What this coach does" },
   { href: "/practice", label: "Practice Interview", description: "Grounded rubric scoring" },
   { href: "/history", label: "My history", description: "Saved evaluations" },
 ] as const;
@@ -17,11 +17,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    setUser(getStoredUser());
+    void getCurrentUser().then(setUser);
+    const sb = getSupabase();
+    if (!sb) return;
+    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const meta = session.user.user_metadata || {};
+        setUser({
+          id: session.user.id,
+          email: session.user.email ?? null,
+          name: meta.full_name || meta.name || session.user.email?.split("@")[0] || "User",
+          avatar_url: meta.avatar_url || meta.picture || null,
+        });
+      } else {
+        setUser(null);
+      }
+    });
+    return () => sub.subscription.unsubscribe();
   }, [pathname]);
 
-  const logout = () => {
-    clearAuthSession();
+  const logout = async () => {
+    await signOutAuth();
     setUser(null);
     router.push("/login");
   };
@@ -65,7 +81,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <p className="truncate px-2 text-xs text-slate-600">{user.name}</p>
               <button
                 type="button"
-                onClick={logout}
+                onClick={() => void logout()}
                 className="w-full rounded-lg border border-coach-mist px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
                 Sign out

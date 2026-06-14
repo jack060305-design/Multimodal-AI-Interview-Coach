@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchMyEvaluations } from "@/lib/api";
-import { getStoredToken } from "@/lib/auth";
+import { getAccessToken } from "@/lib/auth";
 
 type Row = {
   evaluation_id: string;
@@ -16,15 +16,24 @@ type Row = {
 export default function HistoryPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!getStoredToken()) {
-      setError("Sign in to view your evaluation history.");
-      return;
-    }
-    fetchMyEvaluations()
-      .then(setRows)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load history"));
+    void (async () => {
+      const token = await getAccessToken();
+      if (!token) {
+        setError("Sign in to view your evaluation history.");
+        setLoading(false);
+        return;
+      }
+      try {
+        setRows(await fetchMyEvaluations());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load history");
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   if (error) {
@@ -38,10 +47,14 @@ export default function HistoryPage() {
     );
   }
 
+  if (loading) {
+    return <div className="px-6 py-16 text-center text-slate-500">Loading history…</div>;
+  }
+
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="text-2xl font-semibold text-slate-900">My evaluations</h1>
-      <p className="mt-1 text-sm text-slate-600">Stored in Postgres when you practice while signed in.</p>
+      <p className="mt-1 text-sm text-slate-600">Stored in Postgres when signed in.</p>
 
       {rows.length === 0 ? (
         <p className="mt-8 text-slate-500">No saved evaluations yet.</p>

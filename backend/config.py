@@ -62,6 +62,10 @@ class Settings:
     facebook_app_id: str = os.getenv("FACEBOOK_APP_ID", "")
     facebook_app_secret: str = os.getenv("FACEBOOK_APP_SECRET", "")
 
+    # Supabase Auth (recommended — Postgres + Google/Facebook/email)
+    supabase_url: str = os.getenv("SUPABASE_URL", "")
+    supabase_jwt_secret: str = os.getenv("SUPABASE_JWT_SECRET", "")
+
     # Embeddings: huggingface (local) | openai (cloud)
     embedding_backend: str = os.getenv("EMBEDDING_BACKEND", "").lower()
     openai_embedding_model: str = os.getenv(
@@ -87,6 +91,10 @@ class Settings:
         if self.whisper_backend:
             return self.whisper_backend
         return "openai" if self.is_cloud else "local"
+
+    @property
+    def supabase_enabled(self) -> bool:
+        return bool(self.supabase_jwt_secret)
 
     @property
     def facebook_redirect_uri(self) -> str:

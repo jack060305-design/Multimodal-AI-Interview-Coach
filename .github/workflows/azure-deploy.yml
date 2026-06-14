@@ -106,6 +106,12 @@ jobs:
             ENV_VARS+=("DB_ENABLED=true")
             ENV_VARS+=("DATABASE_URL=${{ secrets.DATABASE_URL }}")
           fi
+          if [ -n "${{ secrets.SUPABASE_JWT_SECRET }}" ]; then
+            ENV_VARS+=("SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}")
+          fi
+          if [ -n "${{ secrets.SUPABASE_URL }}" ]; then
+            ENV_VARS+=("SUPABASE_URL=${{ secrets.SUPABASE_URL }}")
+          fi
           if [ -n "${{ secrets.JWT_SECRET }}" ]; then
             ENV_VARS+=("JWT_SECRET=${{ secrets.JWT_SECRET }}")
           fi
