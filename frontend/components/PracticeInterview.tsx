@@ -24,7 +24,7 @@ import {
 } from "@/lib/gpuConsent";
 import { BankQuestion, pickRandomQuestion } from "@/lib/questions";
 import type { ClientDeliveryMetrics } from "@/lib/faceHud";
-import { getAccessToken } from "@/lib/auth";
+import { useAuthSession } from "@/lib/useAuthSession";
 
 type Role = { id: string; label: string };
 type AgentTrace = { node: string; decision: string };
@@ -79,10 +79,11 @@ export default function PracticeInterview() {
   const [consentModalOpen, setConsentModalOpen] = useState(false);
   const [pendingConsent, setPendingConsent] = useState<GpuConsent | null>(null);
   const [signedIn, setSignedIn] = useState(false);
+  const { signedIn: sessionSignedIn, ready: authReady } = useAuthSession();
 
   useEffect(() => {
-    void getAccessToken().then((t) => setSignedIn(Boolean(t)));
-  }, []);
+    if (authReady) setSignedIn(sessionSignedIn);
+  }, [authReady, sessionSignedIn]);
 
   const clearTurnState = useCallback(() => {
     setSessionId(null);

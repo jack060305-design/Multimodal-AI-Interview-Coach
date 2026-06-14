@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { fetchMyEvaluations } from "@/lib/api";
-import { getAccessToken } from "@/lib/auth";
+import { fetchMyEvaluations, ApiError } from "@/lib/api";
+import { useAuthSession } from "@/lib/useAuthSession";
 
 type Row = {
   evaluation_id: string;
@@ -17,10 +17,12 @@ export default function HistoryPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { token, ready } = useAuthSession();
 
   useEffect(() => {
+    if (!ready) return;
+
     void (async () => {
-      const token = await getAccessToken();
       if (!token) {
         setError("Sign in to view your evaluation history.");
         setLoading(false);
@@ -29,12 +31,24 @@ export default function HistoryPage() {
       try {
         setRows(await fetchMyEvaluations());
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load history");
+        if (e instanceof ApiError && e.status === 401) {
+          setError(
+            "Signed in with Google, but the API backend cannot verify your session yet. " +
+              "Redeploy Azure with SUPABASE_URL (or wait for the latest backend deploy)."
+          );
+        } else if (e instanceof ApiError && e.status === 503) {
+          setError(
+            "Signed in, but the database is not connected on the API server. " +
+              "Add DATABASE_URL to GitHub Secrets and redeploy Azure."
+          );
+        } else {
+          setError(e instanceof Error ? e.message : "Failed to load history");
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [ready, token]);
 
   if (error) {
     return (
@@ -47,7 +61,7 @@ export default function HistoryPage() {
     );
   }
 
-  if (loading) {
+  if (!ready || loading) {
     return <div className="px-6 py-16 text-center text-slate-500">Loading history…</div>;
   }
 

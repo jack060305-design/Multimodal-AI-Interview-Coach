@@ -1,15 +1,80 @@
-"""Verify Supabase Auth JWT (HS256, audience authenticated)."""
+"""Verify Supabase Auth JWT (JWKS ES256 or legacy HS256 secret)."""
 
 from __future__ import annotations
 
+import json
+import time
+import urllib.error
+import urllib.request
 from typing import Any
 
-from jose import JWTError, jwt
+from jose import JWTError, jwk, jwt
+from jose.exceptions import JWKError
 
 from config import get_settings
 
+_jwks_cache: dict[str, Any] | None = None
+_jwks_fetched_at: float = 0.0
+_JWKS_TTL_SECONDS = 3600
 
-def decode_supabase_token(token: str) -> dict[str, Any] | None:
+
+def _jwks_url() -> str | None:
+    settings = get_settings()
+    base = settings.supabase_url.rstrip("/")
+    if not base:
+        return None
+    return f"{base}/auth/v1/.well-known/jwks.json"
+
+
+def _load_jwks() -> dict[str, Any] | None:
+    global _jwks_cache, _jwks_fetched_at
+
+    url = _jwks_url()
+    if not url:
+        return None
+
+    now = time.time()
+    if _jwks_cache and now - _jwks_fetched_at < _JWKS_TTL_SECONDS:
+        return _jwks_cache
+
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            _jwks_cache = json.loads(resp.read().decode())
+            _jwks_fetched_at = now
+            return _jwks_cache
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+        return _jwks_cache
+
+
+def _decode_with_jwks(token: str) -> dict[str, Any] | None:
+    jwks = _load_jwks()
+    if not jwks or not jwks.get("keys"):
+        return None
+
+    try:
+        header = jwt.get_unverified_header(token)
+        kid = header.get("kid")
+        alg = header.get("alg")
+        keys = jwks["keys"]
+        key_data = next((k for k in keys if k.get("kid") == kid), None)
+        if key_data is None and len(keys) == 1:
+            key_data = keys[0]
+        if not key_data:
+            return None
+
+        public_key = jwk.construct(key_data)
+        algorithms = [alg] if alg else ["ES256", "RS256"]
+        return jwt.decode(
+            token,
+            public_key,
+            algorithms=algorithms,
+            audience="authenticated",
+        )
+    except (JWTError, JWKError, ValueError):
+        return None
+
+
+def _decode_with_secret(token: str) -> dict[str, Any] | None:
     settings = get_settings()
     secret = settings.supabase_jwt_secret
     if not secret:
@@ -23,3 +88,10 @@ def decode_supabase_token(token: str) -> dict[str, Any] | None:
         )
     except JWTError:
         return None
+
+
+def decode_supabase_token(token: str) -> dict[str, Any] | None:
+    claims = _decode_with_jwks(token)
+    if claims:
+        return claims
+    return _decode_with_secret(token)

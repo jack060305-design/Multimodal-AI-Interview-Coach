@@ -111,6 +111,8 @@ jobs:
           fi
           if [ -n "${{ secrets.SUPABASE_URL }}" ]; then
             ENV_VARS+=("SUPABASE_URL=${{ secrets.SUPABASE_URL }}")
+          else
+            ENV_VARS+=("SUPABASE_URL=https://ttgdcomdfqmbqqiywoxw.supabase.co")
           fi
           if [ -n "${{ secrets.JWT_SECRET }}" ]; then
             ENV_VARS+=("JWT_SECRET=${{ secrets.JWT_SECRET }}")

@@ -94,7 +94,7 @@ class Settings:
 
     @property
     def supabase_enabled(self) -> bool:
-        return bool(self.supabase_jwt_secret)
+        return bool(self.supabase_url or self.supabase_jwt_secret)
 
     @property
     def facebook_redirect_uri(self) -> str:
