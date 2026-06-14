@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 import { completeAuthFlow, setAuthSession } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase/client";
 import { formatAuthError } from "@/lib/supabase/oauth";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 function CallbackHandler() {
   const router = useRouter();
@@ -29,13 +30,26 @@ function CallbackHandler() {
       return;
     }
 
-    const finish = async () => {
-      const authError = params.get("error_description") || params.get("error");
-      if (authError) {
-        setError(formatAuthError(decodeURIComponent(authError)));
-        return;
-      }
+    const authError = params.get("error_description") || params.get("error");
+    if (authError) {
+      setError(formatAuthError(decodeURIComponent(authError)));
+      return;
+    }
 
+    let settled = false;
+    const finish = async () => {
+      if (settled) return;
+      settled = true;
+      await completeAuthFlow(router);
+    };
+
+    const { data: sub } = sb.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+        void finish();
+      }
+    });
+
+    void (async () => {
       const code = params.get("code");
       if (code) {
         const { error: err } = await sb.auth.exchangeCodeForSession(code);
@@ -43,7 +57,7 @@ function CallbackHandler() {
           setError(formatAuthError(err.message));
           return;
         }
-        await completeAuthFlow(router);
+        await finish();
         return;
       }
 
@@ -53,13 +67,13 @@ function CallbackHandler() {
         return;
       }
       if (data.session) {
-        await completeAuthFlow(router);
+        await finish();
       } else {
         setError("No active session — please sign in again.");
       }
-    };
+    })();
 
-    void finish();
+    return () => sub.subscription.unsubscribe();
   }, [params, router]);
 
   if (error) {

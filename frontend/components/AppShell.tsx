@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getCurrentUser, signOutAuth, type AuthUser } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase/client";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 const TOOLS = [
   { href: "/practice", label: "Practice Interview", description: "Grounded rubric scoring" },
@@ -20,7 +21,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     void getCurrentUser().then(setUser);
     const sb = getSupabase();
     if (!sb) return;
-    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = sb.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       if (session?.user) {
         const meta = session.user.user_metadata || {};
         setUser({

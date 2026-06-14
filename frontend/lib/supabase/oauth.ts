@@ -30,6 +30,12 @@ export function formatAuthError(raw: string): string {
   if (lower.includes("email not confirmed")) {
     return "Vui lòng xác nhận email trước khi đăng nhập (kiểm tra hộp thư).";
   }
+  if (lower.includes("pkce") || lower.includes("code verifier")) {
+    return (
+      "Phiên đăng nhập OAuth đã hết hạn hoặc bị gián đoạn. " +
+      "Hãy quay lại trang đăng nhập và thử lại (không mở link trong tab/thiết bị khác)."
+    );
+  }
   return raw;
 }
 
@@ -41,10 +47,11 @@ export async function signInWithOAuthProvider(
     return "Supabase chưa cấu hình — kiểm tra NEXT_PUBLIC_SUPABASE_URL và PUBLISHABLE_KEY.";
   }
 
-  const { error } = await sb.auth.signInWithOAuth({
+  const { data, error } = await sb.auth.signInWithOAuth({
     provider,
     options: {
       redirectTo: oauthRedirectUrl(),
+      skipBrowserRedirect: true,
       queryParams:
         provider === "google"
           ? { access_type: "offline", prompt: "consent" }
@@ -52,5 +59,9 @@ export async function signInWithOAuthProvider(
     },
   });
 
-  return error ? formatAuthError(error.message) : null;
+  if (error) return formatAuthError(error.message);
+  if (data.url) {
+    window.location.assign(data.url);
+  }
+  return null;
 }
