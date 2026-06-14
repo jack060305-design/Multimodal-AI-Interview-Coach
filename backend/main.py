@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from auth import auth_router
 from auth.deps import get_current_user, get_current_user_id_optional
 from config import get_settings
-from db.database import get_db, init_db
+from db.database import get_db, init_db, db_status
 from db.models import User
 from db.repository import EvaluationRepository
 from schemas import (
@@ -40,7 +40,7 @@ from tracing.langsmith_setup import configure_langsmith
 from utils.device import accelerator_status_dict, hardware_status_dict, log_accelerator_profile
 from utils.gpu_consent import clear_stored_consent, consent_status, resolve_consent, save_stored_consent
 
-load_dotenv()
+load_dotenv(override=True)
 logging.basicConfig(level=logging.INFO)
 configure_langsmith()
 
@@ -88,6 +88,7 @@ app.include_router(auth_router)
 
 @app.get("/health")
 async def health():
+    db = db_status()
     return {
         "status": "ok",
         "deploy_profile": settings.deploy_profile,
@@ -96,8 +97,11 @@ async def health():
         "vector_store": settings.resolved_vector_store,
         "storage_backend": settings.storage_backend,
         "db_enabled": settings.db_enabled,
+        "db_connected": db["connected"],
+        "db_error": db["error"],
+        "db_backend": "sqlite" if settings.is_sqlite else "postgres",
         "embedding_backend": settings.resolved_embedding_backend,
-        "auth_enabled": settings.db_enabled,
+        "auth_enabled": settings.db_enabled and db["connected"],
         "supabase_auth": settings.supabase_enabled,
         "langsmith": settings.langsmith_enabled,
         "accelerator": accelerator_status_dict(),

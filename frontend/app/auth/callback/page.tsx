@@ -40,7 +40,11 @@ function CallbackHandler() {
     const finish = async () => {
       if (settled) return;
       settled = true;
-      await completeAuthFlow(router);
+      try {
+        await completeAuthFlow(router);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not complete sign-in");
+      }
     };
 
     const { data: sub } = sb.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {

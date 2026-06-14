@@ -432,6 +432,13 @@ export default function PracticeInterview() {
             API connected ({getApiBaseUrl().replace(/^https?:\/\//, "")}) · {apiHealth.deploy_profile}{" "}
             · LLM {apiHealth.llm_provider} · Whisper {apiHealth.whisper_backend}
             {apiHealth.langsmith ? " · LangSmith on" : ""}
+            {apiHealth.db_connected === false ? " · DB disconnected" : ""}
+          </p>
+        )}
+        {hasApiBackend() && apiHealth?.db_connected === false && (
+          <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            API database is not connected — sign-in works in Supabase but history will not save until
+            DATABASE_URL is set on Azure.
           </p>
         )}
       </header>

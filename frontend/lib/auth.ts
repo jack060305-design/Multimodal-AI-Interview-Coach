@@ -1,5 +1,5 @@
+import { ApiError, syncUserProfile } from "@/lib/api";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
-import { syncUserProfile } from "@/lib/api";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 export type AuthUser = {
@@ -28,6 +28,23 @@ export function getStoredUser(): AuthUser | null {
   } catch {
     return null;
   }
+}
+
+export async function waitForAccessToken(maxMs = 4000): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb) {
+    return getStoredToken();
+  }
+
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const { data } = await sb.auth.getSession();
+    if (data.session?.access_token) {
+      return data.session.access_token;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return null;
 }
 
 export async function getAccessToken(): Promise<string | null> {
@@ -88,19 +105,53 @@ export function facebookLoginUrl(): string {
 
 export { isSupabaseConfigured };
 
+function formatDatabaseSyncError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 503) {
+      const api = process.env.NEXT_PUBLIC_API_URL || "";
+      const isLocal = api.includes("localhost") || api.includes("127.0.0.1");
+      if (isLocal) {
+        return (
+          "API database not connected. Restart the backend after setting DB_ENABLED=true in backend/.env " +
+          "(local uses SQLite automatically). Check http://127.0.0.1:8000/health for db_connected."
+        );
+      }
+      return (
+        "Signed in with Supabase, but the API database is not connected. " +
+        "Set DATABASE_URL in GitHub Secrets and redeploy Azure."
+      );
+    }
+    if (err.status === 401) {
+      return "Session could not be verified by the API. Sign out and sign in again.";
+    }
+    return err.message;
+  }
+  return err instanceof Error ? err.message : "Could not sync profile to database";
+}
+
 /** Persist Supabase user into backend Postgres (users table). */
 export async function syncUserToDatabase(): Promise<void> {
-  const token = await getAccessToken();
-  if (!token) return;
-  try {
-    await syncUserProfile();
-  } catch {
-    // Backend DB may not be configured yet — Supabase auth still works locally.
+  const token = await waitForAccessToken();
+  if (!token) {
+    throw new Error("Session not ready — please try signing in again.");
   }
+  await syncUserProfile();
 }
 
 /** After login/signup: save to DB then open the app. */
 export async function completeAuthFlow(router: AppRouterInstance): Promise<void> {
-  await syncUserToDatabase();
+  if (hasApiBackend()) {
+    try {
+      await syncUserToDatabase();
+    } catch (err) {
+      throw new Error(formatDatabaseSyncError(err));
+    }
+  }
   router.replace("/practice");
+}
+
+function hasApiBackend(): boolean {
+  const fromEnv = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (fromEnv) return true;
+  return process.env.NODE_ENV === "development";
 }

@@ -68,18 +68,19 @@ def _decode_with_jwks(token: str) -> dict[str, Any] | None:
         public_key = jwk.construct(key_data)
         algorithms = [alg] if alg else ["ES256", "RS256"]
         issuers = [issuer] if issuer else [None]
-        issuers.append(None) if issuer else None
         for iss in issuers:
-            try:
-                decode_kwargs: dict[str, Any] = {
-                    "algorithms": algorithms,
-                    "audience": "authenticated",
-                }
-                if iss:
-                    decode_kwargs["issuer"] = iss
-                return jwt.decode(token, public_key, **decode_kwargs)
-            except JWTError:
-                continue
+            for verify_aud in (True, False):
+                try:
+                    decode_kwargs: dict[str, Any] = {
+                        "algorithms": algorithms,
+                    }
+                    if verify_aud:
+                        decode_kwargs["audience"] = "authenticated"
+                    if iss:
+                        decode_kwargs["issuer"] = iss
+                    return jwt.decode(token, public_key, **decode_kwargs)
+                except JWTError:
+                    continue
         return None
     except (JWTError, JWKError, ValueError):
         return None
@@ -142,4 +143,5 @@ def decode_supabase_token(token: str) -> dict[str, Any] | None:
     claims = _decode_with_secret(token)
     if claims:
         return claims
+    # Fallback when JWKS/secret verification fails (network, key rotation, etc.)
     return _verify_via_auth_api(token)

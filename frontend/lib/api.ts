@@ -41,6 +41,15 @@ export function friendlyApiErrorMessage(raw: string, status?: number): string {
   if (lower.includes("openai_api_key") || lower.includes("api key")) {
     return "API key missing or invalid on the server. Check GitHub/Azure secrets and redeploy.";
   }
+  if (
+    status === 503 &&
+    (lower.includes("database") || lower.includes("postgres") || lower.includes("db_"))
+  ) {
+    return (
+      "Database not connected on the API server. " +
+      "Set DATABASE_URL in GitHub Secrets (Supabase Postgres password) and redeploy Azure."
+    );
+  }
   return raw;
 }
 
@@ -50,6 +59,10 @@ export type HealthStatus = {
   whisper_backend?: string;
   llm_provider?: string;
   langsmith?: boolean;
+  db_enabled?: boolean;
+  db_connected?: boolean;
+  db_error?: string | null;
+  auth_enabled?: boolean;
 };
 
 export async function fetchHealth(): Promise<HealthStatus> {

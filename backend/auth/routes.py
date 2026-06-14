@@ -60,6 +60,14 @@ class AuthResponse(BaseModel):
 
 def _require_db(db: Session | None) -> Session:
     if db is None:
+        from db.database import db_status
+
+        status = db_status()
+        if status["configured"] and not status["connected"]:
+            detail = "Database not connected"
+            if status["error"]:
+                detail += f" — {status['error'][:160]}"
+            raise HTTPException(503, detail)
         raise HTTPException(503, "Database not available — set DB_ENABLED=true and DATABASE_URL")
     return db
 

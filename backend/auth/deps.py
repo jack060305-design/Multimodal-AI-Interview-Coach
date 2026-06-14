@@ -1,15 +1,18 @@
+import logging
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from auth.jwt_tokens import decode_access_token
 from auth.repository import UserRepository
 from auth.supabase_jwt import decode_supabase_token
-from db.database import db_session
+from db.database import db_session, is_db_connected
 from db.models import User
 
+logger = logging.getLogger(__name__)
 _bearer = HTTPBearer(auto_error=False)
 
 
@@ -29,18 +32,34 @@ def _user_from_supabase_claims(db: Session, claims: dict) -> User | None:
         or (email.split("@")[0] if email else "User")
     )
     avatar = meta.get("avatar_url") or meta.get("picture")
-    return UserRepository(db).upsert_supabase_user(
-        user_id=user_id,
-        email=email,
-        name=str(name),
-        avatar_url=avatar,
-    )
+    try:
+        return UserRepository(db).upsert_supabase_user(
+            user_id=user_id,
+            email=email,
+            name=str(name),
+            avatar_url=avatar,
+        )
+    except SQLAlchemyError as exc:
+        logger.exception("Failed to sync Supabase user %s into Postgres", user_id)
+        raise HTTPException(
+            503,
+            "Database sync failed — check DATABASE_URL and users table on the API server.",
+        ) from exc
 
 
 def _token_is_valid(token: str) -> bool:
     if decode_supabase_token(token):
         return True
     return decode_access_token(token) is not None
+
+
+def _database_unavailable() -> HTTPException:
+    if not is_db_connected():
+        return HTTPException(
+            503,
+            "Database not connected — set DB_ENABLED=true and a valid DATABASE_URL, then redeploy.",
+        )
+    return HTTPException(503, "Database not available")
 
 
 def get_current_user_optional(
@@ -72,10 +91,13 @@ def get_current_user(
 
     token = creds.credentials
     if not _token_is_valid(token):
-        raise HTTPException(401, "Authentication required")
+        raise HTTPException(
+            401,
+            "Invalid or expired session — sign out and sign in again.",
+        )
 
     if db is None:
-        raise HTTPException(503, "Database not available — set DB_ENABLED=true and DATABASE_URL")
+        raise _database_unavailable()
 
     user = get_current_user_optional(creds=creds, db=db)
     if user is None:

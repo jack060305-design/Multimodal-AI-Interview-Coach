@@ -24,6 +24,12 @@ setup.cmd
 
 Opens **http://localhost:3000** (API on port **8000**). Close the two terminal windows to stop.
 
+### Sign in + database (local)
+
+- **Default:** `setup.cmd` creates `backend/.env` with `DB_ENABLED=true` and **SQLite** at `backend/data/app.db` — Supabase login syncs users without a Postgres password.
+- **Check:** http://127.0.0.1:8000/health should show `db_connected: true`, `db_backend: sqlite`.
+- **Optional cloud Postgres:** set `SUPABASE_DB_PASSWORD` in `backend/.env` or run `scripts/configure-supabase-db.ps1`, then restart the API.
+
 ### How to use
 
 1. Pick **role** + **question**  

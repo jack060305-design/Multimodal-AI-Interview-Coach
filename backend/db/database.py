@@ -1,6 +1,7 @@
 import logging
+from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from config import get_settings
@@ -10,10 +11,27 @@ logger = logging.getLogger(__name__)
 
 _engine = None
 _SessionLocal = None
+_db_init_error: str | None = None
+
+
+def _normalize_database_url(url: str) -> str:
+    if url.startswith("sqlite:"):
+        return url
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif url.startswith("postgresql://") and "+psycopg2" not in url:
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
+
+def _connect_args(url: str) -> dict:
+    if "supabase.co" in url and "sslmode=" not in url:
+        return {"sslmode": "require"}
+    return {}
 
 
 def _migrate_schema(engine) -> None:
-    from sqlalchemy import inspect, text
+    from sqlalchemy import inspect
 
     insp = inspect(engine)
     if "evaluations" not in insp.get_table_names():
@@ -31,29 +49,55 @@ def _migrate_schema(engine) -> None:
 
 
 def init_db() -> bool:
-    global _engine, _SessionLocal
+    global _engine, _SessionLocal, _db_init_error
     settings = get_settings()
     if not settings.db_enabled:
+        _db_init_error = None
         logger.info("Postgres disabled (DB_ENABLED=false)")
         return False
 
     try:
-        url = settings.database_url
-        if url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql+psycopg2://", 1)
-        elif url.startswith("postgresql://") and "+psycopg2" not in url:
-            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
-        _engine = create_engine(url, pool_pre_ping=True)
+        url = _normalize_database_url(settings.database_url)
+        if url.startswith("sqlite:"):
+            db_file = url.replace("sqlite:///", "", 1)
+            Path(db_file).parent.mkdir(parents=True, exist_ok=True)
+            connect_args = {"check_same_thread": False}
+        else:
+            connect_args = _connect_args(url)
+        _engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            pool_size=3,
+            max_overflow=2,
+            connect_args=connect_args,
+        )
+        with _engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         Base.metadata.create_all(bind=_engine)
         _migrate_schema(_engine)
         _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
-        logger.info("Postgres connected and tables ready")
+        _db_init_error = None
+        logger.info("Database connected and tables ready (%s)", url.split("://", 1)[0])
         return True
     except Exception as exc:
+        _db_init_error = str(exc)
         logger.warning("Postgres unavailable, running without persistence: %s", exc)
         _engine = None
         _SessionLocal = None
         return False
+
+
+def is_db_connected() -> bool:
+    return _SessionLocal is not None
+
+
+def db_status() -> dict:
+    settings = get_settings()
+    return {
+        "configured": settings.db_enabled,
+        "connected": is_db_connected(),
+        "error": _db_init_error,
+    }
 
 
 def get_db() -> Session | None:

@@ -33,12 +33,12 @@ export default function HistoryPage() {
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           setError(
-            "Your Google session could not be verified by the API. Try signing out and back in."
+            "Your session could not be verified by the API. Try signing out and back in."
           );
         } else if (e instanceof ApiError && e.status === 503) {
           setError(
-            "Signed in, but the database is not connected on the API server. " +
-              "Add DATABASE_URL to GitHub Secrets and redeploy Azure."
+            "Signed in, but the API database is not connected. " +
+              "Set DATABASE_URL in GitHub Secrets (Supabase Postgres password) and redeploy Azure."
           );
         } else {
           setError(e instanceof Error ? e.message : "Failed to load history");

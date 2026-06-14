@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -47,7 +47,9 @@ class EvaluationRecord(Base):
     delivery_score: Mapped[int] = mapped_column(Integer, default=0)
     communication_score: Mapped[int] = mapped_column(Integer, default=0)
     technical_score: Mapped[int] = mapped_column(Integer, default=0)
-    result_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    result_json: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
     llm_provider: Mapped[str | None] = mapped_column(String(32))
     vector_store: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(
