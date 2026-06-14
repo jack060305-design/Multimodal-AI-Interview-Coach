@@ -1,4 +1,4 @@
-"""Verify Supabase Auth JWT (JWKS ES256 or legacy HS256 secret)."""
+"""Verify Supabase Auth JWT (JWKS ES256, legacy HS256, or Auth API fallback)."""
 
 from __future__ import annotations
 
@@ -51,6 +51,9 @@ def _decode_with_jwks(token: str) -> dict[str, Any] | None:
     if not jwks or not jwks.get("keys"):
         return None
 
+    settings = get_settings()
+    issuer = f"{settings.supabase_url.rstrip('/')}/auth/v1" if settings.supabase_url else None
+
     try:
         header = jwt.get_unverified_header(token)
         kid = header.get("kid")
@@ -64,12 +67,20 @@ def _decode_with_jwks(token: str) -> dict[str, Any] | None:
 
         public_key = jwk.construct(key_data)
         algorithms = [alg] if alg else ["ES256", "RS256"]
-        return jwt.decode(
-            token,
-            public_key,
-            algorithms=algorithms,
-            audience="authenticated",
-        )
+        issuers = [issuer] if issuer else [None]
+        issuers.append(None) if issuer else None
+        for iss in issuers:
+            try:
+                decode_kwargs: dict[str, Any] = {
+                    "algorithms": algorithms,
+                    "audience": "authenticated",
+                }
+                if iss:
+                    decode_kwargs["issuer"] = iss
+                return jwt.decode(token, public_key, **decode_kwargs)
+            except JWTError:
+                continue
+        return None
     except (JWTError, JWKError, ValueError):
         return None
 
@@ -90,8 +101,45 @@ def _decode_with_secret(token: str) -> dict[str, Any] | None:
         return None
 
 
+def _verify_via_auth_api(token: str) -> dict[str, Any] | None:
+    settings = get_settings()
+    base = settings.supabase_url.rstrip("/")
+    api_key = settings.supabase_anon_key
+    if not base or not api_key:
+        return None
+
+    req = urllib.request.Request(
+        f"{base}/auth/v1/user",
+        headers={
+            "apikey": api_key,
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status != 200:
+                return None
+            user = json.loads(resp.read().decode())
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+        return None
+
+    user_id = user.get("id")
+    if not user_id:
+        return None
+
+    return {
+        "sub": user_id,
+        "email": user.get("email"),
+        "user_metadata": user.get("user_metadata") or {},
+        "app_metadata": user.get("app_metadata") or {},
+    }
+
+
 def decode_supabase_token(token: str) -> dict[str, Any] | None:
     claims = _decode_with_jwks(token)
     if claims:
         return claims
-    return _decode_with_secret(token)
+    claims = _decode_with_secret(token)
+    if claims:
+        return claims
+    return _verify_via_auth_api(token)

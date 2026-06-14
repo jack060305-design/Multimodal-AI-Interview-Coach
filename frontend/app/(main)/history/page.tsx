@@ -33,8 +33,7 @@ export default function HistoryPage() {
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           setError(
-            "Signed in with Google, but the API backend cannot verify your session yet. " +
-              "Redeploy Azure with SUPABASE_URL (or wait for the latest backend deploy)."
+            "Your Google session could not be verified by the API. Try signing out and back in."
           );
         } else if (e instanceof ApiError && e.status === 503) {
           setError(

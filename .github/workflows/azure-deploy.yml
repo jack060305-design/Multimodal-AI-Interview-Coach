@@ -89,7 +89,6 @@ jobs:
             "EMBEDDING_BACKEND=openai"
             "LLM_PROVIDER=$PROVIDER"
             "LLM_MODEL=$MODEL"
-            "DB_ENABLED=false"
             "DAILY_QUESTIONS_MODE=agentic"
             "DAILY_QUESTIONS_ENABLED=false"
             "DAILY_QUESTIONS_PER_ROLE=3"
@@ -105,6 +104,8 @@ jobs:
           if [ -n "${{ secrets.DATABASE_URL }}" ]; then
             ENV_VARS+=("DB_ENABLED=true")
             ENV_VARS+=("DATABASE_URL=${{ secrets.DATABASE_URL }}")
+          else
+            ENV_VARS+=("DB_ENABLED=false")
           fi
           if [ -n "${{ secrets.SUPABASE_JWT_SECRET }}" ]; then
             ENV_VARS+=("SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}")
@@ -114,6 +115,7 @@ jobs:
           else
             ENV_VARS+=("SUPABASE_URL=https://ttgdcomdfqmbqqiywoxw.supabase.co")
           fi
+          ENV_VARS+=("SUPABASE_ANON_KEY=sb_publishable_oAWTc_IxskWk11vaU7JzOg_74RccE7t")
           if [ -n "${{ secrets.JWT_SECRET }}" ]; then
             ENV_VARS+=("JWT_SECRET=${{ secrets.JWT_SECRET }}")
           fi

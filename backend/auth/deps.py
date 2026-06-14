@@ -37,14 +37,22 @@ def _user_from_supabase_claims(db: Session, claims: dict) -> User | None:
     )
 
 
+def _token_is_valid(token: str) -> bool:
+    if decode_supabase_token(token):
+        return True
+    return decode_access_token(token) is not None
+
+
 def get_current_user_optional(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session | None = Depends(db_session),
 ) -> User | None:
-    if db is None or creds is None or not creds.credentials:
+    if creds is None or not creds.credentials:
         return None
-    token = creds.credentials
+    if db is None:
+        return None
 
+    token = creds.credentials
     claims = decode_supabase_token(token)
     if claims:
         return _user_from_supabase_claims(db, claims)
@@ -56,8 +64,20 @@ def get_current_user_optional(
 
 
 def get_current_user(
-    user: User | None = Depends(get_current_user_optional),
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session | None = Depends(db_session),
 ) -> User:
+    if creds is None or not creds.credentials:
+        raise HTTPException(401, "Authentication required")
+
+    token = creds.credentials
+    if not _token_is_valid(token):
+        raise HTTPException(401, "Authentication required")
+
+    if db is None:
+        raise HTTPException(503, "Database not available — set DB_ENABLED=true and DATABASE_URL")
+
+    user = get_current_user_optional(creds=creds, db=db)
     if user is None:
         raise HTTPException(401, "Authentication required")
     return user

@@ -65,6 +65,10 @@ class Settings:
     # Supabase Auth (recommended — Postgres + Google/Facebook/email)
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_jwt_secret: str = os.getenv("SUPABASE_JWT_SECRET", "")
+    supabase_anon_key: str = os.getenv(
+        "SUPABASE_ANON_KEY",
+        os.getenv("SUPABASE_PUBLISHABLE_KEY", ""),
+    )
 
     # Embeddings: huggingface (local) | openai (cloud)
     embedding_backend: str = os.getenv("EMBEDDING_BACKEND", "").lower()
