@@ -4,7 +4,9 @@ AI mock interview app: record a video answer, get scores for **delivery**, **com
 
 ## Live demo (no install)
 
-**https://multimodal-ai-interview-coach.vercel.app**
+**https://multimodal-ai-interview-coach.vercel.app** (login: `/login`)
+
+If `/login` shows 404, use the latest preview: **https://multimodal-ai-interview-coach-yf5s.vercel.app/login**
 
 ---
 
