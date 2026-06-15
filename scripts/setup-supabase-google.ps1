@@ -88,6 +88,21 @@ catch {
 }
 
 Write-Host ""
+Write-Host "=== Google OAuth consent screen (DeepSeek-style branding) ===" -ForegroundColor Cyan
+Write-Host "  1. https://console.cloud.google.com/auth/branding"
+Write-Host "     App name: Multimodal AI Interview Coach"
+Write-Host "     Upload logo (square PNG)"
+Write-Host "     Authorized domains: vercel.app (and your domain if you add one later)"
+Write-Host "  2. https://console.cloud.google.com/apis/credentials"
+Write-Host "     OAuth client (Web) -> Authorized JavaScript origins:"
+Write-Host "       http://localhost:3000"
+Write-Host "       $SiteUrl"
+Write-Host "     (Redirect URI for Supabase backend flow: $SupabaseCallback)"
+Write-Host "  3. Supabase -> Auth -> Providers -> Google:"
+Write-Host "     Same Client ID, enable 'Skip nonce check' for GIS / signInWithIdToken"
+Write-Host "  4. Vercel env: NEXT_PUBLIC_GOOGLE_CLIENT_ID=<Web client ID>"
+Write-Host "     Users will see 'Continue to $SiteUrl' instead of *.supabase.co"
+Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Test: http://localhost:3000/login -> click Google icon"
 Write-Host "  2. Add GitHub Secrets (Azure backend saves users to Postgres):"

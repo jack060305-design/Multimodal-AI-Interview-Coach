@@ -6,7 +6,6 @@ import { Suspense, useEffect, useState } from "react";
 import { completeAuthFlow, setAuthSession } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase/client";
 import { formatAuthError } from "@/lib/supabase/oauth";
-import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 function CallbackHandler() {
   const router = useRouter();
@@ -36,48 +35,47 @@ function CallbackHandler() {
       return;
     }
 
-    let settled = false;
-    const finish = async () => {
-      if (settled) return;
-      settled = true;
-      try {
-        await completeAuthFlow(router);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not complete sign-in");
-      }
-    };
-
-    const { data: sub } = sb.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
-      if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
-        void finish();
-      }
-    });
+    let cancelled = false;
 
     void (async () => {
       const code = params.get("code");
       if (code) {
         const { error: err } = await sb.auth.exchangeCodeForSession(code);
+        if (cancelled) return;
         if (err) {
           setError(formatAuthError(err.message));
           return;
         }
-        await finish();
+        try {
+          await completeAuthFlow(router);
+        } catch (err) {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : "Could not complete sign-in");
+          }
+        }
         return;
       }
 
       const { data, error: err } = await sb.auth.getSession();
+      if (cancelled) return;
       if (err) {
         setError(formatAuthError(err.message));
         return;
       }
       if (data.session) {
-        await finish();
+        try {
+          await completeAuthFlow(router);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Could not complete sign-in");
+        }
       } else {
         setError("No active session — please sign in again.");
       }
     })();
 
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+    };
   }, [params, router]);
 
   if (error) {

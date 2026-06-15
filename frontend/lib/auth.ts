@@ -1,14 +1,18 @@
 import { ApiError, syncUserProfile } from "@/lib/api";
+import type { AuthUser } from "@/lib/auth-types";
+import {
+  getFirebaseAuth,
+  getFirebaseIdToken,
+  isFirebaseConfigured,
+  isFirebaseGoogleAuthEnabled,
+  mapFirebaseUser,
+  signOutFirebase,
+  waitForFirebaseUser,
+} from "@/lib/firebase/auth";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
-export type AuthUser = {
-  id: string;
-  email: string | null;
-  name: string;
-  avatar_url: string | null;
-  provider?: string;
-};
+export type { AuthUser } from "@/lib/auth-types";
 
 const TOKEN_KEY = "ic_access_token";
 const USER_KEY = "ic_user";
@@ -31,6 +35,14 @@ export function getStoredUser(): AuthUser | null {
 }
 
 export async function waitForAccessToken(maxMs = 4000): Promise<string | null> {
+  if (isFirebaseGoogleAuthEnabled()) {
+    const user = await waitForFirebaseUser(maxMs);
+    if (user) {
+      const token = await getFirebaseIdToken();
+      if (token) return token;
+    }
+  }
+
   const sb = getSupabase();
   if (!sb) {
     return getStoredToken();
@@ -48,6 +60,11 @@ export async function waitForAccessToken(maxMs = 4000): Promise<string | null> {
 }
 
 export async function getAccessToken(): Promise<string | null> {
+  if (isFirebaseGoogleAuthEnabled()) {
+    const firebaseToken = await getFirebaseIdToken();
+    if (firebaseToken) return firebaseToken;
+  }
+
   const sb = getSupabase();
   if (sb) {
     const { data } = await sb.auth.getSession();
@@ -57,6 +74,11 @@ export async function getAccessToken(): Promise<string | null> {
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
+  if (isFirebaseConfigured()) {
+    const user = getFirebaseAuth()?.currentUser;
+    if (user) return mapFirebaseUser(user);
+  }
+
   const sb = getSupabase();
   if (sb) {
     const { data } = await sb.auth.getUser();
@@ -80,6 +102,7 @@ export async function authHeaders(): Promise<Record<string, string>> {
 }
 
 export async function signOutAuth(): Promise<void> {
+  await signOutFirebase();
   const sb = getSupabase();
   if (sb) {
     await sb.auth.signOut();
@@ -103,7 +126,7 @@ export function facebookLoginUrl(): string {
   return `${base.replace(/\/$/, "")}/auth/facebook/login`;
 }
 
-export { isSupabaseConfigured };
+export { isSupabaseConfigured, isFirebaseConfigured, isFirebaseGoogleAuthEnabled };
 
 function formatDatabaseSyncError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -117,11 +140,25 @@ function formatDatabaseSyncError(err: unknown): string {
         );
       }
       return (
-        "Signed in with Supabase, but the API database is not connected. " +
+        "Signed in, but the API database is not connected. " +
         "Set DATABASE_URL in GitHub Secrets and redeploy Azure."
       );
     }
     if (err.status === 401) {
+      const api = process.env.NEXT_PUBLIC_API_URL || "";
+      const isLocal = api.includes("localhost") || api.includes("127.0.0.1");
+      if (isLocal) {
+        if (isFirebaseGoogleAuthEnabled()) {
+          return (
+            "API could not verify your Firebase/Google session. Set FIREBASE_PROJECT_ID in backend/.env " +
+            "to match NEXT_PUBLIC_FIREBASE_PROJECT_ID, then restart setup.cmd."
+          );
+        }
+        return (
+          "API could not verify your Google session. Restart setup.cmd so backend/.env has " +
+          "SUPABASE_URL and SUPABASE_ANON_KEY, then sign in again."
+        );
+      }
       return "Session could not be verified by the API. Sign out and sign in again.";
     }
     return err.message;
@@ -129,7 +166,7 @@ function formatDatabaseSyncError(err: unknown): string {
   return err instanceof Error ? err.message : "Could not sync profile to database";
 }
 
-/** Persist Supabase user into backend Postgres (users table). */
+/** Persist auth user into backend Postgres (users table). */
 export async function syncUserToDatabase(): Promise<void> {
   const token = await waitForAccessToken();
   if (!token) {

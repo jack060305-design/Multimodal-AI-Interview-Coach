@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import AuthOAuthIcons from "@/components/AuthOAuthIcons";
 import { authLogin } from "@/lib/api";
 import { completeAuthFlow, isSupabaseConfigured, setAuthSession } from "@/lib/auth";
+import { completeFirebaseRedirectSignIn } from "@/lib/firebase/auth";
 import { getSupabase } from "@/lib/supabase/client";
 import { formatAuthError } from "@/lib/supabase/oauth";
 
@@ -23,6 +24,19 @@ function LoginForm() {
   );
   const [loading, setLoading] = useState(false);
   const useSupabase = isSupabaseConfigured();
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const status = await completeFirebaseRedirectSignIn();
+        if (status === "signed-in") {
+          await completeAuthFlow(router);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Google sign-in failed");
+      }
+    })();
+  }, [router]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();

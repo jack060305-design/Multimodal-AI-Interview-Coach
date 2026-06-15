@@ -103,6 +103,7 @@ async def health():
         "embedding_backend": settings.resolved_embedding_backend,
         "auth_enabled": settings.db_enabled and db["connected"],
         "supabase_auth": settings.supabase_enabled,
+        "firebase_auth": settings.firebase_enabled,
         "langsmith": settings.langsmith_enabled,
         "accelerator": accelerator_status_dict(),
         "gpu": hardware_status_dict(),

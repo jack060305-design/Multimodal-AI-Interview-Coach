@@ -1,7 +1,14 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { completeAuthFlow } from "@/lib/auth";
+import { isFirebaseGoogleAuthEnabled, signInWithGoogleFirebase } from "@/lib/firebase/auth";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import {
+  runGoogleIdTokenSignIn,
+  useBrandedGoogleSignIn,
+} from "@/lib/supabase/google-id-token";
 import { signInWithOAuthProvider } from "@/lib/supabase/oauth";
 
 function GoogleIcon() {
@@ -43,11 +50,50 @@ type Props = {
 };
 
 export default function AuthOAuthIcons({ onError }: Props) {
+  const router = useRouter();
+  const firebaseGoogle = isFirebaseGoogleAuthEnabled();
+  const brandedGoogle = !firebaseGoogle && useBrandedGoogleSignIn();
   const [loading, setLoading] = useState<"google" | "facebook" | null>(null);
 
   if (!isSupabaseConfigured()) return null;
 
-  const startOAuth = async (provider: "google" | "facebook") => {
+  const handleFirebaseGoogle = async () => {
+    setLoading("google");
+    try {
+      const msg = await signInWithGoogleFirebase();
+      if (msg) {
+        onError?.(msg);
+        return;
+      }
+      await completeAuthFlow(router);
+    } catch (err) {
+      onError?.(err instanceof Error ? err.message : "Google sign-in failed");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setLoading("google");
+    try {
+      const msg = brandedGoogle
+        ? await runGoogleIdTokenSignIn()
+        : await signInWithOAuthProvider("google");
+      if (msg) {
+        onError?.(msg);
+        return;
+      }
+      if (brandedGoogle) {
+        await completeAuthFlow(router);
+      }
+    } catch (err) {
+      onError?.(err instanceof Error ? err.message : "Google sign-in failed");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const startLegacyOAuth = async (provider: "facebook") => {
     setLoading(provider);
     const msg = await signInWithOAuthProvider(provider);
     if (msg) onError?.(msg);
@@ -63,7 +109,7 @@ export default function AuthOAuthIcons({ onError }: Props) {
           title="Sign in with Google"
           aria-label="Sign in with Google"
           disabled={loading !== null}
-          onClick={() => void startOAuth("google")}
+          onClick={() => void (firebaseGoogle ? handleFirebaseGoogle() : handleGoogle())}
           className="auth-oauth-btn flex h-11 w-11 items-center justify-center rounded-full border border-coach-mist bg-white shadow-sm transition hover:border-coach-blue/40 hover:shadow-md disabled:opacity-50"
         >
           {loading === "google" ? (
@@ -77,7 +123,7 @@ export default function AuthOAuthIcons({ onError }: Props) {
           title="Sign in with Facebook"
           aria-label="Sign in with Facebook"
           disabled={loading !== null}
-          onClick={() => void startOAuth("facebook")}
+          onClick={() => void startLegacyOAuth("facebook")}
           className="auth-oauth-btn flex h-11 w-11 items-center justify-center rounded-full border border-coach-mist bg-white shadow-sm transition hover:border-coach-blue/40 hover:shadow-md disabled:opacity-50"
         >
           {loading === "facebook" ? (

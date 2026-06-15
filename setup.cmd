@@ -54,6 +54,8 @@ if errorlevel 1 (
 if not exist "backend\.env" (
     copy /Y backend\.env.example backend\.env >nul
     echo       Created backend\.env ^(SQLite login DB — see backend/.env.example^)
+) else (
+    python "%~dp0scripts\ensure-backend-env.py"
 )
 
 rem Clear stale shell overrides so backend/.env wins (load_dotenv override=True)

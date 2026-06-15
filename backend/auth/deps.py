@@ -6,6 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from auth.firebase_jwt import decode_firebase_token, firebase_uid_to_user_id
 from auth.jwt_tokens import decode_access_token
 from auth.repository import UserRepository
 from auth.supabase_jwt import decode_supabase_token
@@ -47,8 +48,36 @@ def _user_from_supabase_claims(db: Session, claims: dict) -> User | None:
         ) from exc
 
 
+def _user_from_firebase_claims(db: Session, claims: dict) -> User | None:
+    firebase_uid = claims.get("user_id") or claims.get("sub")
+    if not firebase_uid:
+        return None
+    user_id = firebase_uid_to_user_id(str(firebase_uid))
+    email = claims.get("email")
+    name = (
+        claims.get("name")
+        or (email.split("@")[0] if email else "User")
+    )
+    avatar = claims.get("picture")
+    try:
+        return UserRepository(db).upsert_firebase_user(
+            user_id=user_id,
+            email=email,
+            name=str(name),
+            avatar_url=avatar,
+        )
+    except SQLAlchemyError as exc:
+        logger.exception("Failed to sync Firebase user %s into Postgres", firebase_uid)
+        raise HTTPException(
+            503,
+            "Database sync failed — check DATABASE_URL and users table on the API server.",
+        ) from exc
+
+
 def _token_is_valid(token: str) -> bool:
     if decode_supabase_token(token):
+        return True
+    if decode_firebase_token(token):
         return True
     return decode_access_token(token) is not None
 
@@ -75,6 +104,10 @@ def get_current_user_optional(
     claims = decode_supabase_token(token)
     if claims:
         return _user_from_supabase_claims(db, claims)
+
+    claims = decode_firebase_token(token)
+    if claims:
+        return _user_from_firebase_claims(db, claims)
 
     user_id = decode_access_token(token)
     if user_id is None:

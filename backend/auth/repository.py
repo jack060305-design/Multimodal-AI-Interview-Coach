@@ -129,3 +129,19 @@ class UserRepository:
             raise
         self.db.refresh(user)
         return user
+
+    def upsert_firebase_user(
+        self,
+        *,
+        user_id: UUID,
+        email: str | None,
+        name: str,
+        avatar_url: str | None = None,
+    ) -> User:
+        """Sync Firebase Auth user into local users (deterministic UUID from Firebase UID)."""
+        return self.upsert_supabase_user(
+            user_id=user_id,
+            email=email,
+            name=name,
+            avatar_url=avatar_url,
+        )

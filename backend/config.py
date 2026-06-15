@@ -91,6 +91,11 @@ class Settings:
             os.getenv("SUPABASE_PUBLISHABLE_KEY", ""),
         )
 
+        self.firebase_project_id: str = os.getenv(
+            "FIREBASE_PROJECT_ID",
+            os.getenv("NEXT_PUBLIC_FIREBASE_PROJECT_ID", ""),
+        ).strip()
+
         self.embedding_backend: str = os.getenv("EMBEDDING_BACKEND", "").lower()
         self.openai_embedding_model: str = os.getenv(
             "OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"
@@ -123,6 +128,10 @@ class Settings:
     @property
     def supabase_enabled(self) -> bool:
         return bool(self.supabase_url or self.supabase_jwt_secret or self.supabase_anon_key)
+
+    @property
+    def firebase_enabled(self) -> bool:
+        return bool(self.firebase_project_id)
 
     @property
     def facebook_redirect_uri(self) -> str:

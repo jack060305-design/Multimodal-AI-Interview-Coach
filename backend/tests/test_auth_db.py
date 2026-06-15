@@ -149,3 +149,12 @@ def test_upsert_supabase_user_reconciles_email_conflict():
     assert user.email == "tester@example.com"
     assert db.query(User).filter(User.id == legacy_id).first() is None
     db.close()
+
+
+def test_firebase_uid_maps_to_deterministic_uuid():
+    fb_mod = _load_module("firebase_jwt_test", BACKEND / "auth" / "firebase_jwt.py")
+    uid = "firebase-test-uid-abc"
+    a = fb_mod.firebase_uid_to_user_id(uid)
+    b = fb_mod.firebase_uid_to_user_id(uid)
+    assert a == b
+    assert fb_mod.decode_firebase_token("not-a-jwt") is None

@@ -1,5 +1,10 @@
 import AuthLayout from "@/components/AuthLayout";
+import AuthGoogleProvider from "@/components/AuthGoogleProvider";
 
 export default function AuthGroupLayout({ children }: { children: React.ReactNode }) {
-  return <AuthLayout>{children}</AuthLayout>;
+  return (
+    <AuthGoogleProvider>
+      <AuthLayout>{children}</AuthLayout>
+    </AuthGoogleProvider>
+  );
 }
