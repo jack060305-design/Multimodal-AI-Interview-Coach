@@ -118,6 +118,8 @@ jobs:
           ENV_VARS+=("SUPABASE_ANON_KEY=sb_publishable_oAWTc_IxskWk11vaU7JzOg_74RccE7t")
           if [ -n "${{ secrets.FIREBASE_PROJECT_ID }}" ]; then
             ENV_VARS+=("FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}")
+          else
+            ENV_VARS+=("FIREBASE_PROJECT_ID=multimodal-ai-interview-coach")
           fi
           if [ -n "${{ secrets.JWT_SECRET }}" ]; then
             ENV_VARS+=("JWT_SECRET=${{ secrets.JWT_SECRET }}")
