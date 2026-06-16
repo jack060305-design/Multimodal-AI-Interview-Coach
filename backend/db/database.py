@@ -3,6 +3,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from config import get_settings
 from db.models import Base
@@ -28,6 +29,24 @@ def _connect_args(url: str) -> dict:
     if "supabase.co" in url and "sslmode=" not in url:
         return {"sslmode": "require"}
     return {}
+
+
+def _uses_transaction_pooler(url: str) -> bool:
+    """Supavisor transaction mode (port 6543) does not support prepared statements."""
+    return ":6543/" in url or ":6543?" in url or "pgbouncer=true" in url.lower()
+
+
+def _engine_kwargs(url: str, connect_args: dict) -> dict:
+    kwargs: dict = {
+        "pool_pre_ping": True,
+        "connect_args": connect_args,
+    }
+    if _uses_transaction_pooler(url):
+        kwargs["poolclass"] = NullPool
+    else:
+        kwargs["pool_size"] = 3
+        kwargs["max_overflow"] = 2
+    return kwargs
 
 
 def _migrate_schema(engine) -> None:
@@ -64,13 +83,7 @@ def init_db() -> bool:
             connect_args = {"check_same_thread": False}
         else:
             connect_args = _connect_args(url)
-        _engine = create_engine(
-            url,
-            pool_pre_ping=True,
-            pool_size=3,
-            max_overflow=2,
-            connect_args=connect_args,
-        )
+        _engine = create_engine(url, **_engine_kwargs(url, connect_args))
         with _engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         Base.metadata.create_all(bind=_engine)

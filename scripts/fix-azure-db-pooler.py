@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import secrets
+import string
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,8 @@ PROJECT_REF = "ttgdcomdfqmbqqiywoxw"
 REPO = "jack060305-design/Multimodal-AI-Interview-Coach"
 ROLE = "interview_coach_app"
 POOLER_HOST = "aws-1-us-west-2.pooler.supabase.com"
+# Session mode (5432) also works; transaction mode (6543) needs NullPool in database.py.
+POOLER_PORT = 6543
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -37,7 +40,9 @@ def run_sql(sql: str) -> None:
 
 
 def main() -> int:
-    password = secrets.token_urlsafe(24)
+    password = "".join(
+        secrets.choice(string.ascii_letters + string.digits) for _ in range(32)
+    )
     safe_pw = password.replace("'", "''")
 
     create = subprocess.run(
@@ -60,16 +65,36 @@ def main() -> int:
                 f"GRANT USAGE ON SCHEMA public TO {ROLE};",
                 f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {ROLE};",
                 f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {ROLE};",
+                f"ALTER DEFAULT PRIVILEGES IN SCHEMA public "
+                f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {ROLE};",
+                f"ALTER DEFAULT PRIVILEGES IN SCHEMA public "
+                f"GRANT USAGE, SELECT ON SEQUENCES TO {ROLE};",
+                f"ALTER ROLE {ROLE} BYPASSRLS;",
+                "ALTER TABLE users DISABLE ROW LEVEL SECURITY;",
+                "ALTER TABLE evaluations DISABLE ROW LEVEL SECURITY;",
             ]
         )
     )
 
     user = f"{ROLE}.{PROJECT_REF}"
     encoded = urllib.parse.quote(password, safe="")
+    # Use postgresql:// (not postgresql+psycopg2://) — Azure env vars break on '+' in values.
     database_url = (
-        f"postgresql+psycopg2://{user}:{encoded}@{POOLER_HOST}:6543/postgres"
+        f"postgresql://{user}:{encoded}@{POOLER_HOST}:{POOLER_PORT}/postgres"
         "?sslmode=require"
     )
+
+    test_script = ROOT / "scripts" / "_test_pooler_conn.py"
+    test_proc = subprocess.run(
+        [sys.executable, str(test_script), database_url],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if test_proc.returncode != 0:
+        print(test_proc.stderr or test_proc.stdout, file=sys.stderr)
+        return test_proc.returncode
 
     proc = subprocess.run(
         ["gh", "secret", "set", "DATABASE_URL", "--repo", REPO],
@@ -82,7 +107,7 @@ def main() -> int:
         print(proc.stderr or proc.stdout, file=sys.stderr)
         return proc.returncode
 
-    print("DATABASE_URL updated to Supabase pooler (port 6543).")
+    print(f"DATABASE_URL updated to Supabase pooler (port {POOLER_PORT}).")
     subprocess.run(
         ["gh", "workflow", "run", "Deploy to Azure Container Apps", "--repo", REPO],
         check=False,

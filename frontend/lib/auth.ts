@@ -133,11 +133,18 @@ function formatDatabaseSyncError(err: unknown): string {
     if (err.status === 503) {
       const api = process.env.NEXT_PUBLIC_API_URL || "";
       const isLocal = api.includes("localhost") || api.includes("127.0.0.1");
+      const detail = err.message?.trim();
       if (isLocal) {
         return (
           "API database not connected. Restart the backend after setting DB_ENABLED=true in backend/.env " +
           "(local uses SQLite automatically). Check http://127.0.0.1:8000/health for db_connected."
         );
+      }
+      if (detail && detail.toLowerCase().includes("sync failed")) {
+        return `Signed in, but profile sync failed on the API: ${detail}`;
+      }
+      if (detail && !detail.startsWith("Database not connected")) {
+        return `Signed in, but the API returned an error: ${detail}`;
       }
       return (
         "Signed in, but the API database is not connected. " +
