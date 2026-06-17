@@ -2,14 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { completeAuthFlow } from "@/lib/auth";
+import {
+  completeAuthFlow,
+  facebookLoginUrl,
+  isBackendFacebookOAuthEnabled,
+} from "@/lib/auth";
 import { isFirebaseGoogleAuthEnabled, signInWithGoogleFirebase } from "@/lib/firebase/auth";
+import { hasApiBackend } from "@/lib/api";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   runGoogleIdTokenSignIn,
   useBrandedGoogleSignIn,
 } from "@/lib/supabase/google-id-token";
 import { signInWithOAuthProvider } from "@/lib/supabase/oauth";
+import { useFacebookOAuthReady } from "@/lib/useFacebookOAuthReady";
 
 function GoogleIcon() {
   return (
@@ -53,9 +59,13 @@ export default function AuthOAuthIcons({ onError }: Props) {
   const router = useRouter();
   const firebaseGoogle = isFirebaseGoogleAuthEnabled();
   const brandedGoogle = !firebaseGoogle && useBrandedGoogleSignIn();
+  const facebookReady = useFacebookOAuthReady();
+  const showGoogle = isSupabaseConfigured();
+  const showFacebook =
+    isBackendFacebookOAuthEnabled() && hasApiBackend() && facebookReady === true;
   const [loading, setLoading] = useState<"google" | "facebook" | null>(null);
 
-  if (!isSupabaseConfigured()) return null;
+  if (!showGoogle && !showFacebook && facebookReady !== false) return null;
 
   const handleFirebaseGoogle = async () => {
     setLoading("google");
@@ -93,46 +103,60 @@ export default function AuthOAuthIcons({ onError }: Props) {
     }
   };
 
-  const startLegacyOAuth = async (provider: "facebook") => {
-    setLoading(provider);
-    const msg = await signInWithOAuthProvider(provider);
-    if (msg) onError?.(msg);
-    setLoading(null);
+  const startFacebookLogin = () => {
+    if (!showFacebook) {
+      onError?.(
+        "Facebook login chưa sẵn sàng — cấu hình FACEBOOK_APP_ID/SECRET trong backend/.env " +
+          "(scripts/setup-facebook-backend-oauth.ps1), rồi restart API."
+      );
+      return;
+    }
+    setLoading("facebook");
+    window.location.assign(facebookLoginUrl());
   };
 
   return (
     <div className="mt-4">
       <p className="text-center text-xs text-slate-500">Or continue with</p>
       <div className="mt-3 flex items-center justify-center gap-3">
-        <button
-          type="button"
-          title="Sign in with Google"
-          aria-label="Sign in with Google"
-          disabled={loading !== null}
-          onClick={() => void (firebaseGoogle ? handleFirebaseGoogle() : handleGoogle())}
-          className="auth-oauth-btn flex h-11 w-11 items-center justify-center rounded-full border border-coach-mist bg-white shadow-sm transition hover:border-coach-blue/40 hover:shadow-md disabled:opacity-50"
-        >
-          {loading === "google" ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-coach-blue border-t-transparent" />
-          ) : (
-            <GoogleIcon />
-          )}
-        </button>
-        <button
-          type="button"
-          title="Sign in with Facebook"
-          aria-label="Sign in with Facebook"
-          disabled={loading !== null}
-          onClick={() => void startLegacyOAuth("facebook")}
-          className="auth-oauth-btn flex h-11 w-11 items-center justify-center rounded-full border border-coach-mist bg-white shadow-sm transition hover:border-coach-blue/40 hover:shadow-md disabled:opacity-50"
-        >
-          {loading === "facebook" ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-coach-blue border-t-transparent" />
-          ) : (
-            <FacebookIcon />
-          )}
-        </button>
+        {showGoogle && (
+          <button
+            type="button"
+            title="Sign in with Google"
+            aria-label="Sign in with Google"
+            disabled={loading !== null}
+            onClick={() => void (firebaseGoogle ? handleFirebaseGoogle() : handleGoogle())}
+            className="auth-oauth-btn flex h-11 w-11 items-center justify-center rounded-full border border-coach-mist bg-white shadow-sm transition hover:border-coach-blue/40 hover:shadow-md disabled:opacity-50"
+          >
+            {loading === "google" ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-coach-blue border-t-transparent" />
+            ) : (
+              <GoogleIcon />
+            )}
+          </button>
+        )}
+        {(showFacebook || (isBackendFacebookOAuthEnabled() && facebookReady === false)) && (
+          <button
+            type="button"
+            title="Sign in with Facebook"
+            aria-label="Sign in with Facebook"
+            disabled={loading !== null || !showFacebook}
+            onClick={startFacebookLogin}
+            className="auth-oauth-btn flex h-11 w-11 items-center justify-center rounded-full border border-coach-mist bg-white shadow-sm transition hover:border-coach-blue/40 hover:shadow-md disabled:opacity-50"
+          >
+            {loading === "facebook" ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-coach-blue border-t-transparent" />
+            ) : (
+              <FacebookIcon />
+            )}
+          </button>
+        )}
       </div>
+      {isBackendFacebookOAuthEnabled() && facebookReady === false && (
+        <p className="mt-2 text-center text-xs text-amber-700">
+          Facebook: chưa cấu hình trên API — xem scripts/setup-facebook-backend-oauth.ps1
+        </p>
+      )}
     </div>
   );
 }

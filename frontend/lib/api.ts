@@ -63,6 +63,7 @@ export type HealthStatus = {
   db_connected?: boolean;
   db_error?: string | null;
   auth_enabled?: boolean;
+  facebook_oauth?: boolean;
 };
 
 export async function fetchHealth(): Promise<HealthStatus> {

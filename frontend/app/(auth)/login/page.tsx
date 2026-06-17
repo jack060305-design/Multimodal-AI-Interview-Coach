@@ -5,7 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import AuthOAuthIcons from "@/components/AuthOAuthIcons";
 import { authLogin } from "@/lib/api";
-import { completeAuthFlow, isSupabaseConfigured, setAuthSession } from "@/lib/auth";
+import {
+  completeAuthFlow,
+  formatFacebookAuthError,
+  isBackendFacebookOAuthEnabled,
+  isSupabaseConfigured,
+  setAuthSession,
+} from "@/lib/auth";
+import { hasApiBackend } from "@/lib/api";
 import { completeFirebaseRedirectSignIn } from "@/lib/firebase/auth";
 import { getSupabase } from "@/lib/supabase/client";
 import { formatAuthError } from "@/lib/supabase/oauth";
@@ -15,15 +22,19 @@ function LoginForm() {
   const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(
-    params.get("error_description") || params.get("error")
-      ? formatAuthError(
-          decodeURIComponent(params.get("error_description") || params.get("error") || "")
-        )
-      : null
-  );
+  const [error, setError] = useState<string | null>(() => {
+    const raw = params.get("error_description") || params.get("error");
+    if (!raw) return null;
+    const decoded = decodeURIComponent(raw);
+    if (params.get("error") && !params.get("error_description")) {
+      return formatFacebookAuthError(decoded);
+    }
+    return formatAuthError(decoded);
+  });
   const [loading, setLoading] = useState(false);
   const useSupabase = isSupabaseConfigured();
+  const showOAuth =
+    useSupabase || (isBackendFacebookOAuthEnabled() && hasApiBackend());
 
   useEffect(() => {
     void (async () => {
@@ -111,7 +122,7 @@ function LoginForm() {
         </Link>
       </p>
 
-      {useSupabase && <AuthOAuthIcons onError={setError} />}
+      {showOAuth && <AuthOAuthIcons onError={setError} />}
     </>
   );
 }

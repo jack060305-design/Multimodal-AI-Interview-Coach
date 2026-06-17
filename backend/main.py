@@ -89,22 +89,24 @@ app.include_router(auth_router)
 @app.get("/health")
 async def health():
     db = db_status()
+    cfg = get_settings()
     return {
         "status": "ok",
-        "deploy_profile": settings.deploy_profile,
-        "whisper_backend": settings.resolved_whisper_backend,
-        "llm_provider": settings.llm_provider,
-        "vector_store": settings.resolved_vector_store,
-        "storage_backend": settings.storage_backend,
-        "db_enabled": settings.db_enabled,
+        "deploy_profile": cfg.deploy_profile,
+        "whisper_backend": cfg.resolved_whisper_backend,
+        "llm_provider": cfg.llm_provider,
+        "vector_store": cfg.resolved_vector_store,
+        "storage_backend": cfg.storage_backend,
+        "db_enabled": cfg.db_enabled,
         "db_connected": db["connected"],
         "db_error": db["error"],
-        "db_backend": "sqlite" if settings.is_sqlite else "postgres",
-        "embedding_backend": settings.resolved_embedding_backend,
-        "auth_enabled": settings.db_enabled and db["connected"],
-        "supabase_auth": settings.supabase_enabled,
-        "firebase_auth": settings.firebase_enabled,
-        "langsmith": settings.langsmith_enabled,
+        "db_backend": "sqlite" if cfg.is_sqlite else "postgres",
+        "embedding_backend": cfg.resolved_embedding_backend,
+        "auth_enabled": cfg.db_enabled and db["connected"],
+        "supabase_auth": cfg.supabase_enabled,
+        "firebase_auth": cfg.firebase_enabled,
+        "facebook_oauth": bool(cfg.facebook_app_id and cfg.facebook_app_secret),
+        "langsmith": cfg.langsmith_enabled,
         "accelerator": accelerator_status_dict(),
         "gpu": hardware_status_dict(),
     }

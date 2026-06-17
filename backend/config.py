@@ -1,10 +1,12 @@
 import os
 from functools import lru_cache
+from pathlib import Path
 from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+_ENV_FILE = Path(__file__).resolve().parent / ".env"
+load_dotenv(_ENV_FILE, override=True)
 
 DEFAULT_SUPABASE_PROJECT = "ttgdcomdfqmbqqiywoxw"
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { completeAuthFlow, setAuthSession } from "@/lib/auth";
+import { completeAuthFlow, formatFacebookAuthError, setAuthSession } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase/client";
 import { formatAuthError } from "@/lib/supabase/oauth";
 
@@ -17,9 +17,11 @@ function CallbackHandler() {
     if (legacyToken) {
       setAuthSession({
         access_token: legacyToken,
-        user: { id: "", email: null, name: "User", avatar_url: null },
+        user: { id: "", email: null, name: "User", avatar_url: null, provider: "facebook" },
       });
-      void completeAuthFlow(router);
+      void completeAuthFlow(router).catch((err) => {
+        setError(err instanceof Error ? err.message : "Could not complete sign-in");
+      });
       return;
     }
 

@@ -9,7 +9,12 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from auth.deps import get_current_user
-from auth.facebook_oauth import exchange_code_for_token, facebook_login_url, fetch_facebook_profile
+from auth.facebook_oauth import (
+    FacebookOAuthError,
+    exchange_code_for_token,
+    facebook_login_url,
+    fetch_facebook_profile,
+)
 from auth.jwt_tokens import create_access_token
 from auth.passwords import verify_password
 from auth.repository import UserRepository
@@ -56,6 +61,25 @@ class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class OAuthStatusResponse(BaseModel):
+    facebook: bool
+    facebook_redirect_uri: str | None = None
+
+
+def _login_error_redirect(frontend: str, code: str) -> RedirectResponse:
+    return RedirectResponse(f"{frontend}/login?error={urllib.parse.quote(code)}")
+
+
+@router.get("/oauth/status", response_model=OAuthStatusResponse)
+def oauth_status():
+    settings = get_settings()
+    configured = bool(settings.facebook_app_id and settings.facebook_app_secret)
+    return OAuthStatusResponse(
+        facebook=configured,
+        facebook_redirect_uri=settings.facebook_redirect_uri if configured else None,
+    )
 
 
 def _require_db(db: Session | None) -> Session:
@@ -109,8 +133,9 @@ def me(user: User = Depends(get_current_user)):
 @router.get("/facebook/login")
 def facebook_login():
     settings = get_settings()
+    frontend = settings.frontend_url.rstrip("/")
     if not settings.facebook_app_id or not settings.facebook_app_secret:
-        raise HTTPException(503, "Facebook login not configured")
+        return _login_error_redirect(frontend, "facebook_not_configured")
     state = secrets.token_urlsafe(24)
     _oauth_states.add(state)
     if len(_oauth_states) > 500:
@@ -129,9 +154,9 @@ def facebook_callback(
     frontend = settings.frontend_url.rstrip("/")
 
     if error:
-        return RedirectResponse(f"{frontend}/login?error={urllib.parse.quote(error)}")
+        return _login_error_redirect(frontend, error)
     if not code or not state or state not in _oauth_states:
-        return RedirectResponse(f"{frontend}/login?error=invalid_oauth_state")
+        return _login_error_redirect(frontend, "invalid_oauth_state")
     _oauth_states.discard(state)
 
     db = _require_db(db)
@@ -140,12 +165,14 @@ def facebook_callback(
     try:
         token = exchange_code_for_token(code)
         profile = fetch_facebook_profile(token)
+    except FacebookOAuthError as exc:
+        return _login_error_redirect(frontend, str(exc)[:120])
     except Exception as exc:
-        return RedirectResponse(f"{frontend}/login?error={urllib.parse.quote(str(exc)[:120])}")
+        return _login_error_redirect(frontend, str(exc)[:120])
 
     fb_id = str(profile.get("id", ""))
     if not fb_id:
-        return RedirectResponse(f"{frontend}/login?error=facebook_profile_missing")
+        return _login_error_redirect(frontend, "facebook_profile_missing")
 
     user = repo.get_by_facebook_id(fb_id)
     if not user:
@@ -163,6 +190,9 @@ def facebook_callback(
                 name=profile.get("name", "Facebook User"),
                 avatar_url=picture,
             )
+
+    if not user.is_active:
+        return _login_error_redirect(frontend, "account_disabled")
 
     jwt = create_access_token(user.id)
     return RedirectResponse(f"{frontend}/auth/callback?token={urllib.parse.quote(jwt)}")

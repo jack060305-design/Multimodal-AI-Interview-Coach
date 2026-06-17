@@ -77,6 +77,7 @@ pushd frontend
 if not exist "node_modules" call npm install
 if not exist ".env.local" copy /Y .env.local.example .env.local >nul
 popd
+python "%~dp0scripts\ensure-frontend-env.py"
 
 echo [3/4] Start API (main.py) + UI...
 start "Interview Coach - Backend" cmd /k "cd /d %~dp0backend && call .venv\Scripts\activate.bat && uvicorn main:app --reload --port 8000"
@@ -107,6 +108,7 @@ echo  Ready
 echo    Web : http://localhost:3000
 echo    API : http://127.0.0.1:8000
 echo    Login: http://localhost:3000/login
-echo    Health: http://127.0.0.1:8000/health  ^(db_connected should be true^)
+echo    Health: http://127.0.0.1:8000/health  ^(db_connected, facebook_oauth^)
+echo    Facebook setup: scripts\setup-facebook-backend-oauth.ps1
 echo.
 pause

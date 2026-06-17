@@ -44,6 +44,12 @@ export function useAuthSession() {
       if (unsub) cleanups.push(unsub);
     }
 
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "ic_access_token" || e.key === "ic_user") void sync();
+    };
+    window.addEventListener("storage", onStorage);
+    cleanups.push(() => window.removeEventListener("storage", onStorage));
+
     return () => {
       cancelled = true;
       cleanups.forEach((fn) => fn());

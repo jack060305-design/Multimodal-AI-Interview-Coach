@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import AuthOAuthIcons from "@/components/AuthOAuthIcons";
 import { authRegister } from "@/lib/api";
-import { completeAuthFlow, isSupabaseConfigured, setAuthSession } from "@/lib/auth";
+import { completeAuthFlow, isBackendFacebookOAuthEnabled, isSupabaseConfigured, setAuthSession } from "@/lib/auth";
+import { hasApiBackend } from "@/lib/api";
 import { getSupabase, oauthRedirectUrl } from "@/lib/supabase/client";
 import { formatAuthError } from "@/lib/supabase/oauth";
 
@@ -18,6 +19,8 @@ export default function SignupPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const useSupabase = isSupabaseConfigured();
+  const showOAuth =
+    useSupabase || (isBackendFacebookOAuthEnabled() && hasApiBackend());
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -123,7 +126,7 @@ export default function SignupPage() {
         </Link>
       </p>
 
-      {useSupabase && <AuthOAuthIcons onError={setError} />}
+      {showOAuth && <AuthOAuthIcons onError={setError} />}
     </>
   );
 }

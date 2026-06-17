@@ -54,9 +54,11 @@ export async function waitForAccessToken(maxMs = 4000): Promise<string | null> {
     if (data.session?.access_token) {
       return data.session.access_token;
     }
+    const legacy = getStoredToken();
+    if (legacy) return legacy;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  return null;
+  return getStoredToken();
 }
 
 export async function getAccessToken(): Promise<string | null> {
@@ -68,7 +70,7 @@ export async function getAccessToken(): Promise<string | null> {
   const sb = getSupabase();
   if (sb) {
     const { data } = await sb.auth.getSession();
-    return data.session?.access_token ?? null;
+    if (data.session?.access_token) return data.session.access_token;
   }
   return getStoredToken();
 }
@@ -83,17 +85,24 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   if (sb) {
     const { data } = await sb.auth.getUser();
     const u = data.user;
-    if (!u) return null;
-    const meta = u.user_metadata || {};
-    return {
-      id: u.id,
-      email: u.email ?? null,
-      name: meta.full_name || meta.name || u.email?.split("@")[0] || "User",
-      avatar_url: meta.avatar_url || meta.picture || null,
-      provider: u.app_metadata?.provider,
-    };
+    if (u) {
+      const meta = u.user_metadata || {};
+      return {
+        id: u.id,
+        email: u.email ?? null,
+        name: meta.full_name || meta.name || u.email?.split("@")[0] || "User",
+        avatar_url: meta.avatar_url || meta.picture || null,
+        provider: u.app_metadata?.provider,
+      };
+    }
   }
   return getStoredUser();
+}
+
+function clearLegacySession(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
 }
 
 export async function authHeaders(): Promise<Record<string, string>> {
@@ -103,13 +112,11 @@ export async function authHeaders(): Promise<Record<string, string>> {
 
 export async function signOutAuth(): Promise<void> {
   await signOutFirebase();
+  clearLegacySession();
   const sb = getSupabase();
   if (sb) {
     await sb.auth.signOut();
-    return;
   }
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
 }
 
 /** @deprecated legacy API login — use Supabase when configured */
@@ -124,6 +131,37 @@ export function setAuthSession(data: {
 export function facebookLoginUrl(): string {
   const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   return `${base.replace(/\/$/, "")}/auth/facebook/login`;
+}
+
+/** Backend Graph API OAuth (redirect to FastAPI /auth/facebook/login). */
+export function isBackendFacebookOAuthEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_BACKEND_FACEBOOK_OAUTH === "true";
+}
+
+export function formatFacebookAuthError(raw: string): string {
+  const code = raw.trim().toLowerCase();
+  if (code === "invalid_oauth_state") {
+    return "Phiên Facebook đã hết hạn — hãy thử đăng nhập lại.";
+  }
+  if (code === "facebook_profile_missing") {
+    return "Không lấy được thông tin Facebook — kiểm tra quyền email/public_profile trên Meta App.";
+  }
+  if (code === "facebook_not_configured") {
+    return (
+      "Facebook login chưa cấu hình trên API. Chạy scripts/setup-facebook-backend-oauth.ps1 " +
+      "với FACEBOOK_APP_ID và FACEBOOK_APP_SECRET, rồi restart setup.cmd."
+    );
+  }
+  if (code === "account_disabled") {
+    return "Tài khoản đã bị vô hiệu hóa — liên hệ quản trị viên.";
+  }
+  if (code.includes("facebook login not configured") || code.includes("not configured")) {
+    return "Facebook login chưa cấu hình — thêm FACEBOOK_APP_ID và FACEBOOK_APP_SECRET vào backend/.env.";
+  }
+  if (code.includes("access denied") || code.includes("user denied")) {
+    return "Bạn đã hủy đăng nhập Facebook.";
+  }
+  return raw;
 }
 
 export { isSupabaseConfigured, isFirebaseConfigured, isFirebaseGoogleAuthEnabled };
@@ -161,6 +199,10 @@ function formatDatabaseSyncError(err: unknown): string {
             "to match NEXT_PUBLIC_FIREBASE_PROJECT_ID, then restart setup.cmd."
           );
         }
+        const legacy = getStoredUser();
+        if (legacy?.provider === "facebook") {
+          return "Phiên Facebook không hợp lệ — đăng xuất và đăng nhập lại bằng Facebook.";
+        }
         return (
           "API could not verify your Google session. Restart setup.cmd so backend/.env has " +
           "SUPABASE_URL and SUPABASE_ANON_KEY, then sign in again."
@@ -174,19 +216,34 @@ function formatDatabaseSyncError(err: unknown): string {
 }
 
 /** Persist auth user into backend Postgres (users table). */
-export async function syncUserToDatabase(): Promise<void> {
+export async function syncUserToDatabase(): Promise<AuthUser | null> {
   const token = await waitForAccessToken();
   if (!token) {
     throw new Error("Session not ready — please try signing in again.");
   }
-  await syncUserProfile();
+  return syncUserProfile();
 }
 
 /** After login/signup: save to DB then open the app. */
 export async function completeAuthFlow(router: AppRouterInstance): Promise<void> {
   if (hasApiBackend()) {
     try {
-      await syncUserToDatabase();
+      const profile = await syncUserToDatabase();
+      const legacyToken = getStoredToken();
+      const sb = getSupabase();
+      const { data: sbSession } = sb ? await sb.auth.getSession() : { data: { session: null } };
+      if (profile && legacyToken && !sbSession?.session) {
+        setAuthSession({
+          access_token: legacyToken,
+          user: {
+            id: profile.id,
+            email: profile.email,
+            name: profile.name,
+            avatar_url: profile.avatar_url,
+            provider: "facebook",
+          },
+        });
+      }
     } catch (err) {
       throw new Error(formatDatabaseSyncError(err));
     }
